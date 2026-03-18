@@ -1,0 +1,14 @@
+[
+  {"id":"1","name":"Johnnie Walker Black","barcode":"5000267024202","category":"Whisky","basePrice":45,"costPrice":28},
+  {"id":"2","name":"Hennessy VS","barcode":"3245995001015","category":"Cognac","basePrice":55,"costPrice":35},
+  {"id":"3","name":"Moët & Chandon","barcode":"3185370001233","category":"Champagne","basePrice":120,"costPrice":80},
+  {"id":"4","name":"Grey Goose Vodka","barcode":"8000040060028","category":"Vodka","basePrice":40,"costPrice":22},
+  {"id":"5","name":"Bombay Sapphire Gin","barcode":"5010677714006","category":"Gin","basePrice":35,"costPrice":20},
+  {"id":"6","name":"Patron Silver Tequila","barcode":"7210003810021","category":"Tequila","basePrice":50,"costPrice":30},
+  {"id":"7","name":"Red Bull Energy","barcode":"9002490100070","category":"Mixers","basePrice":15,"costPrice":8},
+  {"id":"8","name":"Coca-Cola 330ml","barcode":"5449000000996","category":"Mixers","basePrice":10,"costPrice":5},
+  {"id":"9","name":"Castle Lager 340ml","barcode":"6001078012001","category":"Beer","basePrice":20,"costPrice":12},
+  {"id":"10","name":"Heineken 330ml","barcode":"8710398020184","category":"Beer","basePrice":25,"costPrice":15},
+  {"id":"11","name":"Jack Daniels","barcode":"0082184090466","category":"Whisky","basePrice":42,"costPrice":26},
+  {"id":"12","name":"Amarula Cream","barcode":"6001495062018","category":"Liqueur","basePrice":30,"costPrice":18}
+]

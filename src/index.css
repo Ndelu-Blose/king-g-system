@@ -1,0 +1,113 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 10%;
+    --foreground: 40 20% 92%;
+
+    --card: 220 18% 13%;
+    --card-foreground: 40 20% 92%;
+
+    --popover: 220 18% 15%;
+    --popover-foreground: 40 20% 92%;
+
+    --primary: 32 45% 58%;
+    --primary-foreground: 220 20% 8%;
+
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 40 15% 85%;
+
+    --muted: 220 15% 16%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 32 45% 58%;
+    --accent-foreground: 220 20% 8%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 20% 8%;
+
+    --border: 220 15% 20%;
+    --input: 220 15% 20%;
+    --ring: 32 45% 58%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 220 20% 8%;
+    --sidebar-foreground: 40 15% 75%;
+    --sidebar-primary: 32 45% 58%;
+    --sidebar-primary-foreground: 220 20% 8%;
+    --sidebar-accent: 220 15% 14%;
+    --sidebar-accent-foreground: 40 20% 92%;
+    --sidebar-border: 220 15% 16%;
+    --sidebar-ring: 32 45% 58%;
+
+    --gold-glow: 32 60% 50%;
+    --glass: 220 18% 13% / 0.7;
+
+    --font-display: 'Playfair Display', serif;
+    --font-body: 'Inter', sans-serif;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    margin: 0;
+    min-height: 100vh;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  h1, h2, h3 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply bg-card/70 backdrop-blur-xl border border-border/50 rounded-xl;
+  }
+
+  .gold-gradient {
+    background: linear-gradient(135deg, hsl(32 45% 58%), hsl(38 60% 65%));
+  }
+
+  .gold-text {
+    background: linear-gradient(135deg, hsl(32 45% 58%), hsl(38 60% 65%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gold-glow {
+    box-shadow: 0 0 30px -5px hsl(32 45% 58% / 0.3);
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:border-primary/30 hover:shadow-lg;
+    &:hover {
+      box-shadow: 0 8px 32px -8px hsl(32 45% 58% / 0.15);
+    }
+  }
+}
