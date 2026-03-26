@@ -2,7 +2,7 @@
 
 ## Start the app (with real database for real-time data)
 
-1. **Start the API server** (SQLite database and REST API on port 3001):
+1. **Start the API server** (Supabase-backed REST API on port 3001):
 
    ```bash
    cd server
@@ -10,7 +10,7 @@
    npm start
    ```
 
-   Leave this terminal open. You should see: `King G API running at http://localhost:3001 (SQLite database)`.
+   Leave this terminal open. You should see: `King G API running at http://localhost:3001 (Supabase-backed)`.
 
 2. **Start the frontend** (in a second terminal, from the project root):
 
@@ -18,9 +18,9 @@
    npm run dev
    ```
 
-   Open the URL shown (e.g. `http://localhost:8080`). The app will proxy `/api` to the server. Sales are stored in `server/data/kingg.db` and **Transaction History** / **Sales History** refresh from the database every few seconds (real-time).
+Open the URL shown (e.g. `http://localhost:8080`). The app will proxy `/api` to the server. Sales, inventory, help requests, and intakes refresh from Supabase (real-time).
 
-If you skip step 1, the app still runs but uses mock data and in-memory fallbacks; no persistence. **Call Manager** (Help & Support) also needs the backend so managers see help requests on the **Alerts & Help** page.
+If you skip step 1, the app still runs but uses mock data and in-memory fallbacks; no persistence.
 
 ## "Can't reach this page" / Connection timeout
 

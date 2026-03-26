@@ -6,10 +6,11 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand"
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --testPathIgnorePatterns=workflows.test.js",
+    "test:integration": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand workflows.test.js"
   },
   "dependencies": {
-    "better-sqlite3": "^11.6.0",
     "cors": "^2.8.5",
     "express": "^4.21.0",
     "@supabase/supabase-js": "^2.57.0"

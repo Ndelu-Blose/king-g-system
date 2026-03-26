@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, fix/supabase-conflicts]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 jobs:
-  frontend:
+  frontend-unit:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
 
       - name: Install deps
@@ -25,13 +25,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test
-        run: npm run test
+      - name: Run frontend unit tests
+        run: npm run test:unit
 
       - name: Build
         run: npm run build
 
-  backend:
+  backend-unit:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -43,15 +43,42 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: npm
           cache-dependency-path: server/package-lock.json
 
       - name: Install deps
-        run: npm ci
+        run: npm install
 
-      - name: Test
-        run: npm test
+      - name: Run backend unit tests
+        run: npm run test:unit
+
+  backend-integration:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+    defaults:
+      run:
+        working-directory: ./server
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET || 'kingg-pos-dev-secret-change-in-production' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install deps
+        run: npm install
+
+      - name: Run backend integration tests
+        run: npm run test:integration
 
   docker:
     runs-on: ubuntu-latest

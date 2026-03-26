@@ -3,7 +3,7 @@
  * Uses Node crypto for HMAC-SHA256 signed tokens (no external JWT lib).
  */
 import crypto from 'crypto';
-import * as db from './db.js';
+import { getUserByEmail } from './src/services/pos.service.js';
 
 const SECRET = process.env.JWT_SECRET || 'kingg-pos-dev-secret-change-in-production';
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -40,21 +40,29 @@ export function loginHandler(req, res) {
   if (!email || !String(email).trim()) {
     return res.status(400).json({ error: 'Email required' });
   }
-  const user = db.getUserByEmail(String(email).trim());
-  if (!user) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
+  // Supabase-backed dev login (password ignored, as before).
+  getUserByEmail(String(email).trim())
+    .then((user) => {
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      // In production: verify password against user.password_hash. For dev we accept any.
+      const payload = {
+        userId: user.id,
+        role: user.role,
+        name: user.name,
+        email: user.email,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor((Date.now() + TOKEN_TTL_MS) / 1000),
+      };
+      const token = sign(payload);
+      return res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    })
+    .catch((e) => {
+      console.error(e);
+      return res.status(500).json({ error: 'Login failed' });
+    });
   // In production: verify password against user.password_hash. For dev we accept any.
-  const payload = {
-    userId: user.id,
-    role: user.role,
-    name: user.name,
-    email: user.email,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor((Date.now() + TOKEN_TTL_MS) / 1000),
-  };
-  const token = sign(payload);
-  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 }
 
 /**
