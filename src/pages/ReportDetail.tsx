@@ -92,9 +92,6 @@ export default function ReportDetail() {
     }
   };
 
-  if (!report) return <Navigate to="/reports" replace />;
-
-  const ReportIcon = report.icon;
   const categories = useMemo(() => ['all', ...new Set(mockProducts.map((p) => p.category))], []);
 
   // Transactions in selected date range (From ≤ To)
@@ -233,6 +230,9 @@ export default function ReportDetail() {
     { name: 'Actual', cash: (dailyStats.cashSales ?? 0) * 0.98 },
   ];
 
+  if (!report) return <Navigate to="/reports" replace />;
+
+  const ReportIcon = report.icon;
   const showCategoryFilter = ['product-performance', 'stock-level'].includes(report.slug);
   const showLocationFilter = ['stock-level', 'stock-movement'].includes(report.slug);
 

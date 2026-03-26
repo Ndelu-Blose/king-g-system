@@ -1,7 +1,7 @@
 /**
  * POS API layer: calls Node backend when available, falls back to mock data.
  */
-import { mockTransactions, type Transaction } from './mock-data';
+import { type Transaction } from './mock-data';
 import type { Product, SalePayload, AuditEntry, ProductWithStock } from '@/types/pos';
 import { isSupabaseConfigured, supabase } from './supabase';
 import type {
@@ -15,8 +15,6 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const TOKEN_KEY = 'kingg_token';
-let supabaseHelpRequestsDisabled = false;
-let supabaseTransactionsDisabled = false;
 
 function looksLikeUnauthorized(err: unknown): boolean {
   const anyErr = err as any;
@@ -168,60 +166,58 @@ export async function writeAuditLog(entry: Omit<AuditEntry, 'id' | 'timestamp'>)
   await apiPost('/api/audit', { ...entry, timestamp: new Date().toISOString() });
 }
 
-/** Void a sale (server-side). Requires void.approve permission. */
-export async function voidSaleApi(saleId: string, reasonCode?: string): Promise<{ ok: boolean; error?: string }> {
-  if (isSupabaseConfigured) {
-    try {
-      const { data: sale, error: sErr } = await supabase.from('sales').select('*').eq('id', saleId).single();
-      if (sErr || !sale) return { ok: false, error: sErr?.message || 'Sale not found' };
-      const { error: updErr } = await supabase.from('sales').update({ status: 'void' }).eq('id', saleId);
-      if (updErr) return { ok: false, error: updErr.message };
-      const { data: items, error: iErr } = await supabase.from('sale_items').select('*').eq('sale_id', saleId);
-      if (iErr) return { ok: false, error: iErr.message };
-      for (const item of items ?? []) {
-        const { data: inv, error: invErr } = await supabase
-          .from('inventory')
-          .select('total_qty')
-          .eq('product_id', item.product_id)
-          .single();
-        if (invErr) return { ok: false, error: invErr.message };
-        const { error: uErr } = await supabase
-          .from('inventory')
-          .update({ total_qty: (inv.total_qty ?? 0) + (item.qty ?? 0) })
-          .eq('product_id', item.product_id);
-        if (uErr) return { ok: false, error: uErr.message };
-      }
-      await writeAuditLog({
-        action: 'void.completed',
-        actorId: String(sale.cashier_id),
-        actorRole: null,
-        approverId: 'supabase',
-        approverRole: null,
-        entityType: 'sale',
-        entityId: saleId,
-        before: { status: 'completed', total: sale.total },
-        after: { status: 'void' },
-        reasonCode: reasonCode || null,
-      });
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: (e as Error).message };
-    }
+/** Void a sale and restore stock quantities. Requires void.approve permission. */
+export async function voidSaleApi(saleId: string, reasonCode?: string): Promise<{ ok: true }> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured for voiding sales');
   }
-  try {
-    const res = await fetch(`${API_BASE}/api/sales/${encodeURIComponent(saleId)}/void`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ reasonCode: reasonCode || 'void_approved' }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return { ok: false, error: (data as { error?: string }).error || res.statusText };
-    }
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
+
+  const { data: sale, error: saleError } = await supabase.from('sales').select('*').eq('id', saleId).single();
+  if (saleError) throw new Error(saleError.message);
+  if (!sale) throw new Error('Sale not found');
+  if (sale.status === 'void') throw new Error('Sale is already voided');
+
+  const { data: items, error: itemsError } = await supabase.from('sale_items').select('*').eq('sale_id', saleId);
+  if (itemsError) throw new Error(itemsError.message);
+
+  for (const item of items ?? []) {
+    const restoreQty = Math.max(0, Number(item.qty) || 0);
+    if (restoreQty === 0) continue;
+
+    const { data: inv, error: invError } = await supabase
+      .from('inventory')
+      .select('total_qty')
+      .eq('product_id', item.product_id)
+      .single();
+    if (invError) throw new Error(invError.message);
+    if (!inv) throw new Error(`Inventory row not found for product ${item.product_id}`);
+
+    const { error: invUpdateError } = await supabase
+      .from('inventory')
+      .update({ total_qty: (inv.total_qty ?? 0) + restoreQty })
+      .eq('product_id', item.product_id);
+    if (invUpdateError) throw new Error(invUpdateError.message);
+
+    // TODO: restore location-level stock (lounge_qty / warehouse_qty) once sale_items captures source location.
   }
+
+  const { error: statusError } = await supabase.from('sales').update({ status: 'void' }).eq('id', saleId);
+  if (statusError) throw new Error(statusError.message);
+
+  await writeAuditLog({
+    action: 'void.completed',
+    actorId: String(sale.cashier_id),
+    actorRole: null,
+    approverId: 'supabase',
+    approverRole: null,
+    entityType: 'sale',
+    entityId: saleId,
+    before: { status: sale.status, total: sale.total },
+    after: { status: 'void' },
+    reasonCode: reasonCode || null,
+  });
+
+  return { ok: true };
 }
 
 /** Refund a sale (server-side). Requires refund.approve permission. */
@@ -274,48 +270,30 @@ export async function refundSaleApi(
 /** Receive stock into lounge or warehouse (server-side). */
 export async function receiveStockApi(
   payload: { productId: string; qty: number; location: 'lounge' | 'warehouse'; invoiceNumber?: string }
-): Promise<{ ok: boolean; result?: unknown; error?: string }> {
-  if (isSupabaseConfigured) {
-    try {
-      const { data: inv, error } = await supabase
-        .from('inventory')
-        .select('total_qty,lounge_qty,warehouse_qty')
-        .eq('product_id', payload.productId)
-        .single();
-      if (error) return { ok: false, error: error.message };
-      const qty = Math.max(0, Number(payload.qty) || 0);
-      const next = {
-        total_qty: (inv.total_qty ?? 0) + qty,
-        lounge_qty: (inv.lounge_qty ?? 0) + (payload.location === 'lounge' ? qty : 0),
-        warehouse_qty: (inv.warehouse_qty ?? 0) + (payload.location === 'warehouse' ? qty : 0),
-      };
-      const { error: updErr } = await supabase.from('inventory').update(next).eq('product_id', payload.productId);
-      if (updErr) return { ok: false, error: updErr.message };
-      return { ok: true, result: next };
-    } catch (e) {
-      return { ok: false, error: (e as Error).message };
-    }
+): Promise<{ ok: true; result: { total_qty: number; lounge_qty: number; warehouse_qty: number } }> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured for inventory receiving');
   }
-  try {
-    const res = await fetch(`${API_BASE}/api/inventory/receive`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({
-        productId: payload.productId,
-        qty: payload.qty,
-        location: payload.location,
-        invoiceNumber: payload.invoiceNumber || null,
-      }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return { ok: false, error: (data as { error?: string }).error || res.statusText };
-    }
-    const data = await res.json().catch(() => null);
-    return { ok: true, result: data };
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
-  }
+
+  const { data: inv, error } = await supabase
+    .from('inventory')
+    .select('total_qty,lounge_qty,warehouse_qty')
+    .eq('product_id', payload.productId)
+    .single();
+  if (error) throw new Error(error.message);
+  if (!inv) throw new Error(`Inventory row not found for product ${payload.productId}`);
+
+  const qty = Math.max(0, Number(payload.qty) || 0);
+  const next = {
+    total_qty: (inv.total_qty ?? 0) + qty,
+    lounge_qty: (inv.lounge_qty ?? 0) + (payload.location === 'lounge' ? qty : 0),
+    warehouse_qty: (inv.warehouse_qty ?? 0) + (payload.location === 'warehouse' ? qty : 0),
+  };
+
+  const { error: updErr } = await supabase.from('inventory').update(next).eq('product_id', payload.productId);
+  if (updErr) throw new Error(updErr.message);
+
+  return { ok: true, result: next };
 }
 
 export interface DeliveryIntakeApiPayload {
@@ -777,69 +755,38 @@ export async function getBlindCopyByIdApi(blindCopyId: string): Promise<BlindCop
 }
 
 /** Fetch all transactions from the database (real-time). Optional cashierId to filter. */
-export async function getTransactionsFromApi(cashierId?: string | null): Promise<Transaction[] | null> {
-  if (isSupabaseConfigured && !supabaseTransactionsDisabled) {
-    try {
-      // #region agent log
-      fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H2', location: 'src/lib/pos-api.ts:getTransactionsFromApi:preflight', message: 'supabase transactions preflight', data: { cashierId, supabaseTransactionsDisabled, tokenPresent: typeof window !== 'undefined' ? Boolean(localStorage.getItem(TOKEN_KEY)) : false }, timestamp: Date.now() }) }).catch(() => {});
-      // #endregion
+export async function getTransactionsFromApi(cashierId?: string | null): Promise<Transaction[]> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured for transactions');
+  }
 
-      let salesReq = supabase.from('sales').select('*').order('created_at', { ascending: false });
-      if (cashierId) salesReq = salesReq.eq('cashier_id', cashierId);
-      const { data: sales, error: sErr } = await salesReq;
-      if (sErr) {
-        // Supabase is misconfigured or unauthorized. Fall back to backend.
-        supabaseTransactionsDisabled = true;
-      } else {
-        const ids = (sales ?? []).map((s) => s.id);
-        const { data: items, error: iErr } = ids.length
-          ? await supabase.from('sale_items').select('*').in('sale_id', ids)
-          : { data: [], error: null as any };
-        if (iErr) {
-          // Supabase failed again. Fall back to backend.
-          supabaseTransactionsDisabled = true;
-        } else {
-          return (sales ?? []).map((s) => ({
-            id: s.id,
-            cashierId: s.cashier_id,
-            cashierName: s.cashier_name,
-            items: (items ?? [])
-              .filter((i) => i.sale_id === s.id)
-              .map((i) => ({ productName: i.product_name, qty: i.qty, price: i.unit_price })),
-            total: s.total,
-            paymentMethod: s.payment_method,
-            cashReceived: s.cash_received ?? undefined,
-            changeGiven: s.change_given ?? undefined,
-            status: s.status,
-            createdAt: s.created_at,
-          })) as Transaction[];
-        }
-      }
-    } catch (err) {
-      // Any Supabase client error: fall back to backend.
-      supabaseTransactionsDisabled = true;
-    }
-  }
-  try {
-    const url = cashierId
-      ? `${API_BASE}/api/transactions?cashierId=${encodeURIComponent(cashierId)}`
-      : `${API_BASE}/api/transactions`;
-    // #region agent log
-    fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H7', location: 'src/lib/pos-api.ts:getTransactionsFromApi:backend-fetch', message: 'backend transactions fetch', data: { urlHost: (() => { try { return new URL(url).host; } catch { return null; } })(), cashierId, tokenPresent: typeof window !== 'undefined' ? Boolean(localStorage.getItem(TOKEN_KEY)) : false }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
-    const res = await fetch(url, { headers: authHeaders() });
-    // #region agent log
-    fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H8', location: 'src/lib/pos-api.ts:getTransactionsFromApi:backend-response', message: 'backend transactions response', data: { urlHost: (() => { try { return new URL(url).host; } catch { return null; } })(), ok: res.ok, status: res.status, cashierId }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
-    if (!res.ok) return cashierId ? mockTransactions.filter((t) => t.cashierId === cashierId) : mockTransactions;
-    const payload = await res.json();
-    // #region agent log
-    fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H9', location: 'src/lib/pos-api.ts:getTransactionsFromApi:backend-json', message: 'backend transactions json parsed', data: { count: Array.isArray(payload) ? payload.length : null, cashierId }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
-    return payload;
-  } catch {
-    return cashierId ? mockTransactions.filter((t) => t.cashierId === cashierId) : mockTransactions;
-  }
+  let salesReq = supabase.from('sales').select('*').order('created_at', { ascending: false });
+  if (cashierId) salesReq = salesReq.eq('cashier_id', cashierId);
+
+  const { data: sales, error: salesError } = await salesReq;
+  if (salesError) throw new Error(salesError.message);
+
+  const saleIds = (sales ?? []).map((sale) => sale.id);
+  const { data: items, error: itemsError } = saleIds.length
+    ? await supabase.from('sale_items').select('*').in('sale_id', saleIds)
+    : { data: [], error: null };
+
+  if (itemsError) throw new Error(itemsError.message);
+
+  return (sales ?? []).map((sale) => ({
+    id: sale.id,
+    cashierId: sale.cashier_id,
+    cashierName: sale.cashier_name,
+    items: (items ?? [])
+      .filter((item) => item.sale_id === sale.id)
+      .map((item) => ({ productName: item.product_name, qty: item.qty, price: item.unit_price })),
+    total: sale.total,
+    paymentMethod: sale.payment_method,
+    cashReceived: sale.cash_received ?? undefined,
+    changeGiven: sale.change_given ?? undefined,
+    status: sale.status,
+    createdAt: sale.created_at,
+  })) as Transaction[];
 }
 
 const LOCAL_HELP_KEY = 'kingg_help_requests';
@@ -897,87 +844,31 @@ export function removeLocalHelpRequest(id: string): void {
 }
 
 export async function createHelpRequest(payload: HelpRequestPayload): Promise<{ id: string; createdAt: string }> {
-  if (isSupabaseConfigured) {
-    const id = `HR-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const createdAt = new Date().toISOString();
-    try {
-      // #region agent log
-      fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' },
-        body: JSON.stringify({
-          sessionId: '9e56b8',
-          runId: 'pre-fix',
-          hypothesisId: 'H10',
-          location: 'src/lib/pos-api.ts:createHelpRequest:supabase-attempt',
-          message: 'attempt supabase insert help_request',
-          data: { tokenPresent: typeof window !== 'undefined' ? Boolean(localStorage.getItem(TOKEN_KEY)) : false },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
+  const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+  const allowOfflineHelpMode = !token;
+  if (allowOfflineHelpMode) {
+    return saveHelpRequestLocal(payload);
+  }
 
-      const { error } = await supabase.from('help_requests').insert({
-        id,
-        cashier_id: payload.cashierId,
-        cashier_name: payload.cashierName || payload.cashierId,
-        message: payload.message || null,
-        status: 'pending',
-        created_at: createdAt,
-        acknowledged_at: null,
-        acknowledged_by: null,
-      });
-      if (error) throw new Error(error.message);
-      return { id, createdAt };
-    } catch (e) {
-      // #region agent log
-      fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' },
-        body: JSON.stringify({
-          sessionId: '9e56b8',
-          runId: 'pre-fix',
-          hypothesisId: 'H11',
-          location: 'src/lib/pos-api.ts:createHelpRequest:supabase-fail',
-          message: 'supabase insert failed; falling back to backend',
-          data: { errorMessage: (e as Error).message ?? null, tokenPresent: typeof window !== 'undefined' ? Boolean(localStorage.getItem(TOKEN_KEY)) : false },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      // Continue to backend fallback below.
-    }
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured for help requests');
   }
-  try {
-    const res = await fetch(`${API_BASE}/api/help-requests`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      // #region agent log
-      fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' },
-        body: JSON.stringify({
-          sessionId: '9e56b8',
-          runId: 'pre-fix',
-          hypothesisId: 'H12',
-          location: 'src/lib/pos-api.ts:createHelpRequest:backend-response-ok',
-          message: 'backend help-requests POST ok',
-          data: { status: res.status },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-      const data = await res.json();
-      if (data && typeof data.id === 'string') return data;
-    }
-  } catch {
-    // Network error: continue to fallback
-  }
-  // API failed or unreachable: save locally so managers see it on Alerts & Help and cashier always sees success
-  return saveHelpRequestLocal(payload);
+
+  const id = `HR-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const createdAt = new Date().toISOString();
+  const { error } = await supabase.from('help_requests').insert({
+    id,
+    cashier_id: payload.cashierId,
+    cashier_name: payload.cashierName || payload.cashierId,
+    message: payload.message || null,
+    status: 'pending',
+    created_at: createdAt,
+    acknowledged_at: null,
+    acknowledged_by: null,
+  });
+
+  if (error) throw new Error(error.message);
+  return { id, createdAt };
 }
 
 export interface HelpRequest {
@@ -991,90 +882,34 @@ export interface HelpRequest {
   acknowledgedBy: string | null;
 }
 
-export async function getHelpRequests(status?: string | null): Promise<HelpRequest[] | null> {
-  if (isSupabaseConfigured) {
-    if (!supabaseHelpRequestsDisabled) {
-      try {
-      // If no app token is present, fail over to local mock requests instead of spamming Supabase with 401.
-      // This avoids console noise when auth/RLS is not fully configured.
-      const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
-      const hasSupabaseSession = await (async () => {
-        try {
-          const { data } = await supabase.auth.getSession();
-          return Boolean((data as any)?.session?.access_token);
-        } catch {
-          return false;
-        }
-      })();
-
-      // #region agent log
-      fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H2', location: 'src/lib/pos-api.ts:getHelpRequests:preflight', message: 'help requests preflight', data: { status: status ?? null, supabaseHelpRequestsDisabled, tokenPresent: Boolean(token), tokenLen: token?.length ?? 0, hasSupabaseSession }, timestamp: Date.now() }) }).catch(() => {});
-      // #endregion
-
-      if (!token) {
-        const local = getLocalHelpRequests();
-        const filtered = status ? local.filter((r) => r.status === status) : local;
-        return filtered;
-      }
-
-      let req = supabase.from('help_requests').select('*').order('created_at', { ascending: false });
-      if (status) req = req.eq('status', status);
-      const { data, error } = await req;
-      if (error) {
-        // #region agent log
-        fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H3', location: 'src/lib/pos-api.ts:getHelpRequests:error-branch', message: 'unauthorized while fetching help_requests', data: { status: status ?? null, errorStatus: (error as any)?.statusCode ?? (error as any)?.status, errorMessage: (error as any)?.message ?? null, looksLikeUnauthorized: looksLikeUnauthorized(error) }, timestamp: Date.now() }) }).catch(() => {});
-        // #endregion
-
-        supabaseHelpRequestsDisabled = true;
-      }
-      if (!error) {
-        return (data ?? []).map((r) => ({
-          id: r.id,
-          cashierId: r.cashier_id,
-          cashierName: r.cashier_name,
-          message: r.message,
-          status: r.status,
-          createdAt: r.created_at,
-          acknowledgedAt: r.acknowledged_at,
-          acknowledgedBy: r.acknowledged_by,
-        }));
-      }
-      }
-      catch {
-        // Supabase failed. Fall back to backend below.
-        supabaseHelpRequestsDisabled = true;
-      }
-    }
-  }
-  try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
-    if (!token) {
-      const local = getLocalHelpRequests();
-      return status ? local.filter((r) => r.status === status) : local;
-    }
-    const url = status
-      ? `${API_BASE}/api/help-requests?status=${encodeURIComponent(status)}`
-      : `${API_BASE}/api/help-requests`;
-    // #region agent log
-    fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H7', location: 'src/lib/pos-api.ts:getHelpRequests:backend-fetch', message: 'backend help-requests fetch', data: { urlHost: (() => { try { return new URL(url).host; } catch { return null; } })(), status: status ?? null, tokenPresent: typeof window !== 'undefined' ? Boolean(localStorage.getItem(TOKEN_KEY)) : false }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
-    const res = await fetch(url, { headers: authHeaders() });
-    // #region agent log
-    fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H8', location: 'src/lib/pos-api.ts:getHelpRequests:backend-response', message: 'backend help-requests response', data: { urlHost: (() => { try { return new URL(url).host; } catch { return null; } })(), ok: res.ok, status: res.status, statusQuery: status ?? null }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
-    if (!res.ok) {
-      const local = getLocalHelpRequests();
-      return status ? local.filter((r) => r.status === status) : local;
-    }
-    const payload = await res.json();
-    // #region agent log
-    fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' }, body: JSON.stringify({ sessionId: '9e56b8', runId: 'pre-fix', hypothesisId: 'H9', location: 'src/lib/pos-api.ts:getHelpRequests:backend-json', message: 'backend help-requests json parsed', data: { count: Array.isArray(payload) ? payload.length : null, statusQuery: status ?? null }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
-    return payload;
-  } catch {
+export async function getHelpRequests(status?: string | null): Promise<HelpRequest[]> {
+  const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+  const allowOfflineHelpMode = !token;
+  if (allowOfflineHelpMode) {
     const local = getLocalHelpRequests();
     return status ? local.filter((r) => r.status === status) : local;
   }
+
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured for help requests');
+  }
+
+  let req = supabase.from('help_requests').select('*').order('created_at', { ascending: false });
+  if (status) req = req.eq('status', status);
+
+  const { data, error } = await req;
+  if (error) throw new Error(error.message);
+
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    cashierId: r.cashier_id,
+    cashierName: r.cashier_name,
+    message: r.message,
+    status: r.status,
+    createdAt: r.created_at,
+    acknowledgedAt: r.acknowledged_at,
+    acknowledgedBy: r.acknowledged_by,
+  }));
 }
 
 export async function acknowledgeHelpRequest(id: string, acknowledgedBy: string): Promise<boolean> {
@@ -1083,61 +918,18 @@ export async function acknowledgeHelpRequest(id: string, acknowledgedBy: string)
     return true;
   }
 
-  if (isSupabaseConfigured) {
-    try {
-      const { error } = await supabase
-        .from('help_requests')
-        .update({
-          status: 'acknowledged',
-          acknowledged_at: new Date().toISOString(),
-          acknowledged_by: acknowledgedBy,
-        })
-        .eq('id', id);
-
-      if (!error) return true;
-
-      // #region agent log
-      fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' },
-        body: JSON.stringify({
-          sessionId: '9e56b8',
-          runId: 'pre-fix',
-          hypothesisId: 'H13',
-          location: 'src/lib/pos-api.ts:acknowledgeHelpRequest:supabase-error',
-          message: 'supabase acknowledge failed; falling back to backend',
-          data: { errorMessage: error.message ?? null, localId: id.startsWith('local-') },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-    } catch {
-      // #region agent log
-      fetch('http://127.0.0.1:7625/ingest/426ed756-23b9-47e6-863b-620b6101b95c', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '9e56b8' },
-        body: JSON.stringify({
-          sessionId: '9e56b8',
-          runId: 'pre-fix',
-          hypothesisId: 'H14',
-          location: 'src/lib/pos-api.ts:acknowledgeHelpRequest:supabase-exception',
-          message: 'supabase acknowledge threw; falling back to backend',
-          data: { localId: id.startsWith('local-') },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-    }
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured for help requests');
   }
 
-  try {
-    const res = await fetch(`${API_BASE}/api/help-requests/${encodeURIComponent(id)}/acknowledge`, {
-      method: 'PATCH',
-      headers: authHeaders(),
-      body: JSON.stringify({ acknowledgedBy }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
+  const { error } = await supabase
+    .from('help_requests')
+    .update({
+      status: 'acknowledged',
+      acknowledged_at: new Date().toISOString(),
+      acknowledged_by: acknowledgedBy,
+    })
+    .eq('id', id);
+  if (error) throw new Error(error.message);
+  return true;
 }
