@@ -165,6 +165,11 @@ export default function AppSidebar() {
   const pathname = location.pathname;
   const shift = useShift();
 
+  const role = user?.role;
+  const isOwner = role === 'owner';
+  const isCashier = role === 'cashier';
+  const isManager = role === 'manager' || role === 'senior_manager';
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     ownerMainSections.forEach((s) => {
@@ -180,12 +185,6 @@ export default function AppSidebar() {
   const toggleSection = (title: string) => {
     setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
   };
-
-  if (!user) return null;
-
-  const isOwner = user.role === 'owner';
-  const isCashier = user.role === 'cashier';
-  const isManager = user.role === 'manager' || user.role === 'senior_manager';
 
   const { data: helpRequestsData } = useQuery({
     queryKey: ['help-requests', 'count'],
@@ -205,6 +204,8 @@ export default function AppSidebar() {
       setOpenShiftOpen(true);
     }
   }, [isCashier, shift.isOpen, pathname]);
+
+  if (!user) return null;
 
   return (
     <aside className="fixed left-0 top-0 z-50 flex h-screen w-64 flex-col border-r border-sidebar-border bg-sidebar">
