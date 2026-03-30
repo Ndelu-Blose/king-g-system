@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
-import { Eye, EyeOff } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showDemo, setShowDemo] = useState(false);
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -24,102 +25,183 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Ambient glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full opacity-10 blur-3xl gold-gradient pointer-events-none" />
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Ambient glows */}
+      <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[760px] h-[760px] rounded-full opacity-10 blur-3xl gold-gradient pointer-events-none" />
+      <div className="absolute top-20 left-0 w-[420px] h-[420px] rounded-full opacity-10 blur-3xl gold-gradient pointer-events-none" />
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="w-full max-w-md"
-      >
-        {/* Logo */}
-        <div className="text-center mb-10">
-          <img
-            src="/logo.png"
-            alt="King G"
-            className="mx-auto w-20 h-20 object-contain mb-4"
-          />
-          <h1 className="font-display text-3xl font-bold tracking-wide text-foreground">KING G</h1>
-          <p className="text-muted-foreground mt-1">Lifestyle & Lounge</p>
-          <p className="text-xs text-muted-foreground mt-1">Enterprise POS System</p>
-        </div>
+      <div className="relative max-w-6xl mx-auto px-4 py-12">
+        <div className="grid lg:grid-cols-2 gap-10 items-center">
+          {/* Brand block (top/left) */}
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="w-full"
+          >
+            <div className="relative">
+              <div className="absolute -top-6 -left-6 w-72 h-72 rounded-full opacity-10 blur-3xl gold-gradient pointer-events-none" />
 
-        {/* Form */}
-        <div className="glass-card p-8">
-          <h2 className="font-display text-xl font-semibold text-foreground mb-6">Sign In</h2>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full px-4 py-3 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                placeholder="you@kingg.co.za"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">Password</label>
               <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all pr-12"
-                  placeholder="Enter password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                <div className="flex items-center gap-4">
+                  <img
+                    src="/logo.png"
+                    alt="King G"
+                    className="w-20 h-20 lg:w-24 lg:h-24 object-contain"
+                  />
+                  <div>
+                    <h1 className="font-display text-4xl lg:text-5xl font-bold tracking-wide text-foreground">
+                      KING G
+                    </h1>
+                    <p className="text-muted-foreground mt-1 text-sm lg:text-base">Lifestyle & Lounge</p>
+                  </div>
+                </div>
+
+                <p className="mt-5 text-sm lg:text-base text-muted-foreground max-w-md">
+                  Secure access to the enterprise operations platform.
+                </p>
+
+                <div className="mt-8 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <ShieldCheck className="w-5 h-5 text-primary mt-0.5" />
+                    <div className="text-sm text-foreground/80">
+                      Role-based access controls for managers, cashiers, and owners.
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="w-5 h-5 text-primary mt-0.5" />
+                    <div className="text-sm text-foreground/80">
+                      A polished lounge-to-POS workflow, built for fast daily operations.
+                    </div>
+                  </div>
+                </div>
+
+                <p className="mt-10 text-xs text-muted-foreground">
+                  Authorized access only.
+                </p>
               </div>
             </div>
+          </motion.div>
 
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
+          {/* Login card (right/bottom) */}
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="w-full"
+          >
+            <div className="glass-card rounded-3xl p-8 lg:p-10">
+              <h2 className="font-display text-2xl font-semibold text-foreground mb-2">
+                Sign in
+              </h2>
+              <p className="text-sm text-muted-foreground mb-8">
+                Enter your credentials to access King G operations.
+              </p>
 
-            <button
-              type="submit"
-              className="w-full py-3 rounded-lg gold-gradient text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity gold-glow"
-            >
-              Sign In
-            </button>
-          </form>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    className="w-full h-12 px-4 rounded-xl bg-secondary/50 border border-border/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors"
+                    placeholder="you@kingg.co.za"
+                    required
+                    autoComplete="email"
+                  />
+                </div>
 
-          <div className="mt-6 pt-5 border-t border-border">
-            <p className="text-xs text-muted-foreground mb-2">Demo accounts (any password):</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {[
-                { email: 'owner@kingg.co.za', role: 'Owner' },
-                { email: 'thabo@kingg.co.za', role: 'Sr. Manager' },
-                { email: 'lerato@kingg.co.za', role: 'Manager' },
-                { email: 'sipho@kingg.co.za', role: 'Cashier' },
-              ].map(a => (
+                <div>
+                  <label className="block text-sm font-medium text-muted-foreground mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      className="w-full h-12 px-4 rounded-xl bg-secondary/50 border border-border/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors pr-12"
+                      placeholder="Enter password"
+                      required
+                      autoComplete="current-password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && <p className="text-sm text-destructive">{error}</p>}
+
                 <button
-                  key={a.email}
-                  type="button"
-                  onClick={() => { setEmail(a.email); setPassword('demo'); }}
-                  className="px-3 py-2 rounded-md bg-secondary text-secondary-foreground hover:bg-sidebar-accent transition-colors text-left"
+                  type="submit"
+                  className="w-full h-12 rounded-xl gold-gradient text-primary-foreground font-semibold text-base hover:opacity-95 transition-all gold-glow"
                 >
-                  <span className="text-primary font-medium">{a.role}</span>
-                  <br />
-                  <span className="text-muted-foreground">{a.email}</span>
+                  Sign In
                 </button>
-              ))}
+              </form>
+
+              {/* Demo accounts */}
+              <div className="mt-8 pt-6 border-t border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setShowDemo(v => !v)}
+                  className="w-full flex items-center justify-between gap-4 text-left"
+                  aria-expanded={showDemo}
+                >
+                  <span className="text-sm font-medium text-foreground">
+                    Demo accounts
+                  </span>
+                  <span className="text-muted-foreground">
+                    {showDemo ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </span>
+                </button>
+
+                {showDemo && (
+                  <>
+                    <p className="text-xs text-muted-foreground mt-3 mb-4">
+                      Demo accounts (any password):
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {[
+                        { email: 'owner@kingg.co.za', role: 'Owner' },
+                        { email: 'thabo@kingg.co.za', role: 'Sr. Manager' },
+                        { email: 'lerato@kingg.co.za', role: 'Manager' },
+                        { email: 'sipho@kingg.co.za', role: 'Cashier' },
+                      ].map(a => (
+                        <button
+                          key={a.email}
+                          type="button"
+                          onClick={() => {
+                            setEmail(a.email);
+                            setPassword('demo');
+                          }}
+                          className="px-4 py-3 rounded-xl bg-secondary/40 border border-border/50 hover:bg-sidebar-accent/50 transition-colors text-left"
+                        >
+                          <div className="text-sm font-semibold text-primary">{a.role}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{a.email}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <p className="mt-6 text-xs text-muted-foreground">
+                Secure role-based access for King G operations.
+              </p>
             </div>
-          </div>
+          </motion.div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
