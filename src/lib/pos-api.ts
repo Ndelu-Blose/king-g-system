@@ -16,13 +16,20 @@ import type {
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const TOKEN_KEY = 'kingg_token';
 
+function readUnknownProp(obj: unknown, key: string): unknown {
+  if (typeof obj !== 'object' || obj === null) return undefined;
+  return (obj as Record<string, unknown>)[key];
+}
+
 function looksLikeUnauthorized(err: unknown): boolean {
-  const anyErr = err as any;
-  const status = anyErr?.statusCode ?? anyErr?.status;
+  const status = readUnknownProp(err, 'statusCode') ?? readUnknownProp(err, 'status');
   if (status === 401) return true;
 
-  const msg = typeof err === 'string' ? err : anyErr?.message ?? anyErr?.error_description;
-  const text = typeof msg === 'string' ? msg : '';
+  const raw =
+    typeof err === 'string'
+      ? err
+      : readUnknownProp(err, 'message') ?? readUnknownProp(err, 'error_description');
+  const text = typeof raw === 'string' ? raw : String(raw ?? '');
   const lower = text.toLowerCase();
   return lower.includes('401') || lower.includes('unauthorized');
 }
