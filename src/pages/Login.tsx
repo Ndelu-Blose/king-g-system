@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
-import { ChevronDown, ChevronUp, Eye, EyeOff, ShieldCheck, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Login() {
@@ -57,6 +57,17 @@ export default function Login() {
                   </div>
                 </div>
 
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_18px_hsl(141_70%_50%/0.45)]" />
+                    <span className="text-xs text-foreground/80">System online</span>
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-secondary/30 border border-border/50 px-3 py-1">
+                    <LockKeyhole className="w-3.5 h-3.5 text-primary" />
+                    <span className="text-xs text-foreground/80">Secure role-based access</span>
+                  </div>
+                </div>
+
                 <p className="mt-5 text-sm lg:text-base text-muted-foreground max-w-md">
                   Secure access to the enterprise operations platform.
                 </p>
@@ -90,7 +101,9 @@ export default function Login() {
             transition={{ duration: 0.6 }}
             className="w-full"
           >
-            <div className="glass-card rounded-3xl p-8 lg:p-10">
+            <div className="glass-card rounded-3xl p-8 lg:p-10 relative border-border/70 shadow-[0_30px_120px_-60px_hsl(32_45%_58%/0.35)]">
+              <div className="pointer-events-none absolute -top-10 -left-10 w-72 h-72 rounded-full opacity-10 blur-3xl gold-gradient" />
+              <div className="pointer-events-none absolute -bottom-16 -right-16 w-80 h-80 rounded-full opacity-10 blur-3xl gold-gradient" />
               <h2 className="font-display text-2xl font-semibold text-foreground mb-2">
                 Sign in
               </h2>
@@ -107,7 +120,7 @@ export default function Login() {
                     type="email"
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className="w-full h-12 px-4 rounded-xl bg-secondary/50 border border-border/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors"
+                    className="w-full h-12 px-4 rounded-xl bg-secondary/40 border border-border/70 text-foreground placeholder:text-muted-foreground shadow-inner focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors"
                     placeholder="you@kingg.co.za"
                     required
                     autoComplete="email"
@@ -123,7 +136,7 @@ export default function Login() {
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      className="w-full h-12 px-4 rounded-xl bg-secondary/50 border border-border/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors pr-12"
+                    className="w-full h-12 px-4 rounded-xl bg-secondary/40 border border-border/70 text-foreground placeholder:text-muted-foreground shadow-inner focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors pr-12"
                       placeholder="Enter password"
                       required
                       autoComplete="current-password"
@@ -143,7 +156,7 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  className="w-full h-12 rounded-xl gold-gradient text-primary-foreground font-semibold text-base hover:opacity-95 transition-all gold-glow"
+                  className="w-full h-12 rounded-xl gold-gradient text-primary-foreground font-semibold text-base hover:opacity-95 transition-all gold-glow transform-gpu hover:-translate-y-[1px] focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] active:translate-y-0"
                 >
                   Sign In
                 </button>
@@ -184,7 +197,7 @@ export default function Login() {
                             setEmail(a.email);
                             setPassword('demo');
                           }}
-                          className="px-4 py-3 rounded-xl bg-secondary/40 border border-border/50 hover:bg-sidebar-accent/50 transition-colors text-left"
+                          className="px-4 py-3 rounded-xl bg-secondary/35 border border-border/60 hover:bg-sidebar-accent/50 hover:border-primary/30 hover:shadow-[0_0_0_1px_hsl(32_45%_58%/0.14)] transition-all text-left transform-gpu hover:-translate-y-[1px] active:translate-y-0"
                         >
                           <div className="text-sm font-semibold text-primary">{a.role}</div>
                           <div className="text-xs text-muted-foreground mt-0.5">{a.email}</div>
