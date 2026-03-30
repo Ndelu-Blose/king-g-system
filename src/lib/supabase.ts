@@ -5,7 +5,6 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   // Keep this explicit so misconfiguration is easy to diagnose.
-  // eslint-disable-next-line no-console
   console.warn('Supabase env vars missing: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY');
 }
 
