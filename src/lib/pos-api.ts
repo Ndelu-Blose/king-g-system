@@ -16,9 +16,13 @@ import type {
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
 const TOKEN_KEY = 'kingg_token';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function readUnknownProp(obj: unknown, key: string): unknown {
-  if (typeof obj !== 'object' || obj === null) return undefined;
-  return (obj as Record<string, unknown>)[key];
+  if (!isRecord(obj)) return undefined;
+  return obj[key];
 }
 
 function looksLikeUnauthorized(err: unknown): boolean {
