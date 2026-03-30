@@ -55,14 +55,14 @@ jobs:
 
   backend-integration:
     runs-on: ubuntu-latest
-    if: ${{ secrets.SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
     defaults:
       run:
         working-directory: ./server
     env:
+      # Optional repo secrets: when unset, workflows.test.js skips via describe.skip.
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      JWT_SECRET: ${{ secrets.JWT_SECRET || 'kingg-pos-dev-secret-change-in-production' }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
