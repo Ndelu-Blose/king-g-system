@@ -66,6 +66,9 @@ export interface AuditEntry {
   action: string;
   actorId: string;
   actorRole?: string;
+  entityType?: string;
+  entityId?: string;
+  reasonCode?: string | null;
   before?: unknown;
   after?: unknown;
   timestamp: string;

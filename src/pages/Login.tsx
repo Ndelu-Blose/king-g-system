@@ -10,17 +10,24 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     setError('');
-    const loggedInUser = login(email, password);
-    if (loggedInUser) {
-      navigate(loggedInUser.role === 'cashier' ? '/pos' : '/dashboard');
-    } else {
-      setError('Invalid credentials. Try: owner@kingg.co.za');
+    try {
+      const loggedInUser = await login(email, password);
+      if (loggedInUser) {
+        navigate(loggedInUser.role === 'cashier' ? '/pos' : '/dashboard');
+      } else {
+        setError('Invalid credentials. Try: owner@kingg.co.za');
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -156,9 +163,10 @@ export default function Login() {
 
                 <button
                   type="submit"
+                  disabled={submitting}
                   className="w-full h-12 rounded-xl gold-gradient text-primary-foreground font-semibold text-base hover:opacity-95 transition-all gold-glow transform-gpu hover:-translate-y-[1px] focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] active:translate-y-0"
                 >
-                  Sign In
+                  {submitting ? 'Signing in...' : 'Sign In'}
                 </button>
               </form>
 

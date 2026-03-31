@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
+import { writeAudit } from "./pos.service.js";
 
 async function supabase() {
   return getSupabaseAdmin();
@@ -187,8 +188,26 @@ export async function saveVerification(intakeId, lines, status) {
   };
 }
 
-export async function confirmIntake(intakeId) {
+export async function confirmIntake(intakeId, { user } = {}) {
   const client = await supabase();
+
+  // Load header first so we can make this operation idempotent.
+  const { data: header, error: hErr } = await client.from("delivery_intakes").select("*").eq("id", intakeId).maybeSingle();
+  if (hErr) throw hErr;
+  if (!header) throw new Error("Intake not found");
+
+  // Idempotency: if already confirmed, do not re-apply stock deltas.
+  if (header.status === "confirmed") {
+    const { data: savedLines, error: linesErr } = await client
+      .from("delivery_intake_lines")
+      .select("*")
+      .eq("intake_id", intakeId);
+    if (linesErr) throw linesErr;
+    return {
+      header: toDeliveryIntakeHeader(header),
+      lines: (savedLines ?? []).map(toDeliveryLine),
+    };
+  }
 
   const { data: lines, error: lErr } = await client
     .from("delivery_intake_lines")
@@ -219,7 +238,7 @@ export async function confirmIntake(intakeId) {
   }
 
   const now = new Date().toISOString();
-  const { data: header, error: hErr } = await client
+  const { data: updatedHeader, error: hErr2 } = await client
     .from("delivery_intakes")
     .update({
       status: "confirmed",
@@ -229,7 +248,7 @@ export async function confirmIntake(intakeId) {
     .eq("id", intakeId)
     .select("*")
     .single();
-  if (hErr) throw hErr;
+  if (hErr2) throw hErr2;
 
   const { data: savedLines, error: linesErr } = await client
     .from("delivery_intake_lines")
@@ -237,14 +256,37 @@ export async function confirmIntake(intakeId) {
     .eq("intake_id", intakeId);
   if (linesErr) throw linesErr;
 
+  // Critical audit trail: capture who confirmed and link to intake.
+  await writeAudit({
+    action: "intake.confirmed",
+    actorId: user?.id ?? null,
+    actorRole: user?.role ?? null,
+    entityType: "intake",
+    entityId: intakeId,
+    before: { status: header.status, confirmedAt: header.confirmed_at ?? null },
+    after: { status: "confirmed", confirmedAt: now },
+    timestamp: now,
+  });
+
   return {
-    header: toDeliveryIntakeHeader(header),
+    header: toDeliveryIntakeHeader(updatedHeader),
     lines: (savedLines ?? []).map(toDeliveryLine),
   };
 }
 
-export async function generateBlindCopy(intakeId) {
+export async function generateBlindCopy(intakeId, { user } = {}) {
   const client = await supabase();
+
+  // Idempotency: only generate once per intake.
+  const { data: existingCopy, error: existingErr } = await client
+    .from("blind_transfer_copies")
+    .select("*")
+    .eq("intake_id", intakeId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingErr) throw existingErr;
+  if (existingCopy) return { header: toBlindCopyHeader(existingCopy), lines: [] };
 
   const { data: intake, error: iErr } = await client
     .from("delivery_intakes")
@@ -291,24 +333,55 @@ export async function generateBlindCopy(intakeId) {
     if (blErr) throw blErr;
   }
 
+  await writeAudit({
+    action: "blind_copy.generated",
+    actorId: user?.id ?? null,
+    actorRole: user?.role ?? null,
+    entityType: "intake",
+    entityId: intakeId,
+    after: { blindCopyId: header.id, blindCopyNumber: header.blind_copy_number },
+    timestamp: header.created_at ?? new Date().toISOString(),
+  });
+
   return { header: toBlindCopyHeader(header), lines: [] };
 }
 
-export async function issueBlindCopy(blindCopyId) {
+export async function issueBlindCopy(blindCopyId, { user } = {}) {
   const client = await supabase();
-  const { data: header, error } = await client
+  const { data: current, error: selErr } = await client.from("blind_transfer_copies").select("*").eq("id", blindCopyId).maybeSingle();
+  if (selErr) throw selErr;
+  if (!current) throw new Error("Blind copy not found");
+
+  // Idempotency: don't duplicate audit/history if already issued.
+  if (current.status === "issued") {
+    return { header: toBlindCopyHeader(current), lines: [] };
+  }
+
+  const now = new Date().toISOString();
+  const { data: updated, error: updErr } = await client
     .from("blind_transfer_copies")
     .update({
       status: "issued",
-      issued_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      issued_at: now,
+      updated_at: now,
     })
     .eq("id", blindCopyId)
     .select("*")
     .single();
+  if (updErr) throw updErr;
 
-  if (error) throw error;
-  return { header: toBlindCopyHeader(header), lines: [] };
+  await writeAudit({
+    action: "blind_copy.issued",
+    actorId: user?.id ?? null,
+    actorRole: user?.role ?? null,
+    entityType: "blind_copy",
+    entityId: blindCopyId,
+    before: { status: current.status },
+    after: { status: "issued", issuedAt: now },
+    timestamp: now,
+  });
+
+  return { header: toBlindCopyHeader(updated), lines: [] };
 }
 
 export async function getIntakeById(intakeId) {

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { getSupabaseAdmin } from "../lib/supabase.js";
 
 const DEFAULT_SETTINGS = {
@@ -17,6 +18,63 @@ function isNotFoundError(err) {
   if (!err) return false;
   const msg = typeof err.message === "string" ? err.message : "";
   return err.code === "PGRST116" || msg.includes("0 rows") || msg.toLowerCase().includes("no rows");
+}
+
+// Prevent double-submits (e.g. double-click checkout) from creating multiple
+// sales / double-decrementing stock. This is an in-memory guard (sufficient
+// for rapid duplicates; durable idempotency would require a DB constraint).
+// Keep this window small so we only collapse true "double-click" submits.
+// Too-long windows can mistakenly dedup legitimate back-to-back identical sales.
+const SALE_DEDUP_TTL_MS = 2_500;
+const saleDedupCache = new Map(); // key -> { expiresAt, promise }
+
+function pruneSaleDedupCache(now = Date.now()) {
+  for (const [k, v] of saleDedupCache.entries()) {
+    if (!v || v.expiresAt <= now) saleDedupCache.delete(k);
+  }
+}
+
+function stableStringify(value) {
+  // Stable stringify for hashing: recursively sort object keys.
+  const sorter = (v) => {
+    if (v == null) return v;
+    if (Array.isArray(v)) return v.map(sorter);
+    if (typeof v === "object") {
+      const out = {};
+      for (const k of Object.keys(v).sort()) out[k] = sorter(v[k]);
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(sorter(value));
+}
+
+function buildSaleIdempotencyKey(payload, cashierId) {
+  if (payload?.idempotencyKey && typeof payload.idempotencyKey === "string") return `key:${payload.idempotencyKey}`;
+
+  const items = (payload?.items ?? []).map((it) => ({
+    productId: String(it.productId ?? ""),
+    qty: Number(it.qty ?? 0),
+    unitPrice: Number(it.unitPrice ?? 0),
+    lineTotal: Number(it.lineTotal ?? (Number(it.qty ?? 0) * Number(it.unitPrice ?? 0))),
+  }));
+  const payments = (payload?.payments ?? []).map((p) => ({
+    method: String(p.method ?? "").toLowerCase(),
+    cashReceived: p.cashReceived ?? null,
+    change: p.change ?? null,
+    amount: p.amount ?? null,
+  }));
+
+  const material = {
+    cashierId: String(cashierId ?? payload?.cashierId ?? ""),
+    subtotal: Number(payload?.subtotal ?? 0),
+    vat: Number(payload?.vat ?? 0),
+    total: Number(payload?.total ?? 0),
+    items,
+    payments,
+  };
+  const hash = crypto.createHash("sha256").update(stableStringify(material)).digest("hex");
+  return `hash:${hash}`;
 }
 
 async function supabase() {
@@ -230,59 +288,108 @@ export async function postStockAdjustment(productId, delta, reasonCode, { actorI
 export async function createSale(payload, cashierName = "") {
   const client = await supabase();
 
-  const id = randomId("TXN");
-  const createdAt = new Date().toISOString();
-  const payment = payload.payments?.[0] || {};
-  const method = payment.method === "cash" ? "cash" : "card";
+  const cashierId = payload?.cashierId;
+  const dedupKey = buildSaleIdempotencyKey(payload, cashierId);
 
-  const saleRow = {
-    id,
-    cashier_id: payload.cashierId,
-    cashier_name: cashierName || payload.cashierId,
-    subtotal: payload.subtotal ?? 0,
-    vat: payload.vat ?? 0,
-    total: payload.total ?? 0,
-    payment_method: method,
-    cash_received: payment.cashReceived ?? null,
-    change_given: payment.change ?? null,
-    status: "completed",
-    created_at: createdAt,
-  };
-
-  const { error: saleErr } = await client.from("sales").insert(saleRow);
-  if (saleErr) throw saleErr;
-
-  const items = payload.items || [];
-  const rows = items.map((item) => ({
-    sale_id: id,
-    product_id: item.productId,
-    product_name: item.name,
-    qty: item.qty,
-    unit_price: item.unitPrice,
-    line_total: item.lineTotal ?? item.qty * item.unitPrice,
-  }));
-
-  if (rows.length) {
-    const { error: itemsErr } = await client.from("sale_items").insert(rows);
-    if (itemsErr) throw itemsErr;
+  pruneSaleDedupCache();
+  const existing = saleDedupCache.get(dedupKey);
+  if (existing && existing.expiresAt > Date.now() && existing.promise) {
+    const result = await existing.promise;
+    return { ...result, created: false };
   }
 
-  // Decrement total stock (matches legacy behavior).
-  for (const item of items) {
-    const { data: inv, error: invErr } = await client
-      .from("inventory")
-      .select("total_qty")
-      .eq("product_id", item.productId)
-      .maybeSingle();
-    if (invErr) throw invErr;
-    if (!inv) throw new Error(`Inventory row not found for product ${item.productId}`);
+  const promise = (async () => {
+    const id = randomId("TXN");
+    const createdAt = new Date().toISOString();
+    const payment = payload.payments?.[0] || {};
+    const method = String(payment.method ?? "").toLowerCase() === "cash" ? "cash" : "card";
 
-    const currentTotal = Number(inv.total_qty ?? 0);
-    const nextTotal = currentTotal - (Number(item.qty) || 0);
-    await client.from("inventory").update({ total_qty: nextTotal }).eq("product_id", item.productId);
+    const items = payload.items || [];
+    if (!Array.isArray(items) || items.length === 0) throw new Error("Invalid sale items");
+
+    // Pre-flight inventory check to prevent negative stock.
+    const qtyByProduct = new Map();
+    for (const item of items) {
+      const pid = String(item.productId ?? "");
+      const qty = Number(item.qty ?? 0);
+      if (!pid) throw new Error("Invalid productId");
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error("Invalid quantity");
+      qtyByProduct.set(pid, (qtyByProduct.get(pid) ?? 0) + qty);
+    }
+
+    for (const [productId, requestedQty] of qtyByProduct.entries()) {
+      const { data: inv, error: invErr } = await client
+        .from("inventory")
+        .select("total_qty")
+        .eq("product_id", productId)
+        .maybeSingle();
+      if (invErr) throw invErr;
+      if (!inv) throw new Error(`Inventory row not found for product ${productId}`);
+      const currentTotal = Number(inv.total_qty ?? 0);
+      if (currentTotal < requestedQty) {
+        throw new Error(`Insufficient stock for product ${productId}`);
+      }
+    }
+
+    const saleRow = {
+      id,
+      cashier_id: payload.cashierId,
+      cashier_name: cashierName || payload.cashierId,
+      subtotal: payload.subtotal ?? 0,
+      vat: payload.vat ?? 0,
+      total: payload.total ?? 0,
+      payment_method: method,
+      cash_received: payment.cashReceived ?? null,
+      change_given: payment.change ?? null,
+      status: "completed",
+      created_at: createdAt,
+    };
+
+    const { error: saleErr } = await client.from("sales").insert(saleRow);
+    if (saleErr) throw saleErr;
+
+    const rows = items.map((item) => ({
+      sale_id: id,
+      product_id: item.productId,
+      product_name: item.name,
+      qty: item.qty,
+      unit_price: item.unitPrice,
+      line_total: item.lineTotal ?? item.qty * item.unitPrice,
+    }));
+
+    if (rows.length) {
+      const { error: itemsErr } = await client.from("sale_items").insert(rows);
+      if (itemsErr) throw itemsErr;
+    }
+
+    // Decrement total stock (matches legacy behavior; location-level stock is not modeled here).
+    for (const item of items) {
+      const pid = String(item.productId ?? "");
+      const dec = Number(item.qty) || 0;
+      const { data: inv, error: invErr } = await client
+        .from("inventory")
+        .select("total_qty")
+        .eq("product_id", pid)
+        .maybeSingle();
+      if (invErr) throw invErr;
+      if (!inv) throw new Error(`Inventory row not found for product ${pid}`);
+      const currentTotal = Number(inv.total_qty ?? 0);
+      const nextTotal = currentTotal - dec;
+      await client.from("inventory").update({ total_qty: nextTotal }).eq("product_id", pid);
+    }
+
+    return { id, createdAt, created: true };
+  })();
+
+  saleDedupCache.set(dedupKey, { expiresAt: Date.now() + SALE_DEDUP_TTL_MS, promise });
+
+  try {
+    const result = await promise;
+    return result;
+  } catch (e) {
+    saleDedupCache.delete(dedupKey);
+    throw e;
   }
-
-  return { id, createdAt };
 }
 
 export async function getSaleById(saleId) {

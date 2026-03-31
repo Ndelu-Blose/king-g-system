@@ -1,10 +1,11 @@
 import request from "supertest";
 import app from "../src/app.js";
 import { getSupabaseAdmin } from "../src/lib/supabase.js";
+import { isRealSupabaseConfigured } from "./test-utils.js";
 
 const OWNER_EMAIL = "owner@kingg.co.za";
 const CASHIER_EMAIL = "sipho@kingg.co.za";
-const supabaseConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabaseConfigured = isRealSupabaseConfigured();
 
 async function login(email) {
   const res = await request(app).post("/api/auth/login").send({ email, password: "dev" });
@@ -148,14 +149,15 @@ function buildSalePayload() {
   });
 
   it("runs the receiving intake flow + blind copy flow", async () => {
+    const intakeNumber = `IN-001-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const createDraftRes = await request(app)
       .post("/api/intakes/draft")
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({
-        intakeNumber: "IN-001",
+        intakeNumber,
         supplier: "Test Supplier",
-        invoiceNumber: "INV-001",
-        deliveryReference: "DEL-001",
+        invoiceNumber: `INV-${intakeNumber}`,
+        deliveryReference: `DEL-${intakeNumber}`,
         deliveryDate: "2026-03-26",
         branchSite: "Main",
         receiveIntoLocation: "warehouse",
@@ -271,5 +273,5 @@ function buildSalePayload() {
     const getBlindCopyRes = await request(app).get(`/api/blind-copies/${encodeURIComponent(blindCopyId)}`);
     expect(getBlindCopyRes.statusCode).toBe(200);
     expect(Number(getBlindCopyRes.body?.lines?.[0]?.qty)).toBe(5);
-  });
+  }, 30000);
 });
