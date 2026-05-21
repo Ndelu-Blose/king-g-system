@@ -22,14 +22,15 @@ function mapUser(row) {
 }
 
 export async function getUserByEmail(email) {
-  const client = await supabase();
   const needle = String(email || "").trim().toLowerCase();
-  if (!needle) return null;
+  if (!needle || !needle.includes("@") || /[%_]/.test(needle)) return null;
+
+  const client = await supabase();
 
   const { data, error } = await client
     .from("users")
     .select("id,name,email,role,password_hash,active")
-    .ilike("email", needle)
+    .eq("email", needle)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;

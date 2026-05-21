@@ -4,7 +4,7 @@
  */
 import crypto from 'crypto';
 import { getUserByEmail } from './src/services/users.service.js';
-import { verifyPassword } from './src/lib/passwords.js';
+import { credentialsValid } from './src/lib/auth-credentials.js';
 
 const SECRET = process.env.JWT_SECRET || 'kingg-pos-dev-secret-change-in-production';
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -32,19 +32,6 @@ function verify(token) {
   }
 }
 
-function credentialsValid(user, password) {
-  if (!password || !String(password).length) return false;
-  if (user.passwordHash) {
-    return verifyPassword(password, user.passwordHash);
-  }
-  // Legacy dev users without a hash: any non-empty password still works.
-  return true;
-}
-
-/**
- * POST /api/auth/login body: { email, password }.
- * Returns { token, user: { id, name, email, role } }.
- */
 /**
  * GET /api/auth/me — current user from Bearer token.
  */
