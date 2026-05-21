@@ -79,29 +79,107 @@ export function createApp() {
     if (!payload || !Array.isArray(payload.items)) {
       return res.status(400).json({ error: "Invalid sale payload: need items" });
     }
+    if (payload.items.length === 0) {
+      return res.status(400).json({ error: "Invalid sale payload: items cannot be empty" });
+    }
+    if (!Array.isArray(payload.payments) || payload.payments.length === 0) {
+      return res.status(400).json({ error: "Invalid sale payload: payments required" });
+    }
+
+    const EPS = 0.01;
+    const normalizedItems = [];
+    for (const item of payload.items) {
+      const productId = String(item?.productId ?? "").trim();
+      const name = String(item?.name ?? "");
+      const qty = Number(item?.qty ?? 0);
+      const unitPrice = Number(item?.unitPrice ?? 0);
+      const lineTotalSent = item?.lineTotal != null ? Number(item.lineTotal) : qty * unitPrice;
+      const lineTotalComputed = qty * unitPrice;
+
+      if (!productId) return res.status(400).json({ error: "Invalid sale payload: productId required" });
+      if (!Number.isFinite(qty) || qty <= 0) return res.status(400).json({ error: "Invalid quantity" });
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) return res.status(400).json({ error: "Invalid unitPrice" });
+      if (Math.abs(lineTotalSent - lineTotalComputed) > EPS) {
+        return res.status(400).json({ error: "Invalid lineTotal" });
+      }
+
+      normalizedItems.push({ productId, name, qty, unitPrice, lineTotal: lineTotalSent });
+    }
+
+    const computedSubtotal = normalizedItems.reduce((sum, it) => sum + it.lineTotal, 0);
+    const sentSubtotal = Number(payload.subtotal ?? computedSubtotal);
+    const sentVat = Number(payload.vat ?? 0);
+    const sentTotal = Number(payload.total ?? computedSubtotal + sentVat);
+
+    if (Math.abs(sentSubtotal - computedSubtotal) > EPS) {
+      return res.status(400).json({ error: "Invalid sale totals: subtotal mismatch" });
+    }
+    if (sentVat < 0 || sentTotal < 0 || sentSubtotal < 0) {
+      return res.status(400).json({ error: "Invalid sale totals" });
+    }
+    if (Math.abs(sentTotal - (computedSubtotal + sentVat)) > EPS) {
+      return res.status(400).json({ error: "Invalid sale totals: total mismatch" });
+    }
+
+    const firstPayment = payload.payments[0] ?? {};
+    const method = String(firstPayment.method ?? "").toLowerCase();
+    if (!method) return res.status(400).json({ error: "Invalid payment method" });
+
+    if (method === "cash") {
+      const cashReceived = Number(firstPayment.cashReceived);
+      const changeGiven = Number(firstPayment.change);
+      if (!Number.isFinite(cashReceived)) return res.status(400).json({ error: "Invalid cashReceived" });
+      if (!Number.isFinite(changeGiven)) return res.status(400).json({ error: "Invalid change" });
+      if (cashReceived + EPS < sentTotal) return res.status(400).json({ error: "cashReceived is less than total" });
+      const expectedChange = cashReceived - sentTotal;
+      if (Math.abs(changeGiven - expectedChange) > EPS) return res.status(400).json({ error: "Invalid change" });
+    } else {
+      // card / eft / etc: amount must match total
+      const amount = Number(firstPayment.amount);
+      if (!Number.isFinite(amount)) return res.status(400).json({ error: "Invalid payment amount" });
+      if (Math.abs(amount - sentTotal) > EPS) return res.status(400).json({ error: "Payment amount must equal total" });
+    }
+
     const cashierId = req.user.id;
     const cashierName = req.user.name || "";
-    const payloadWithActor = { ...payload, cashierId, cashierName };
+
+    const payloadWithActor = {
+      ...payload,
+      idempotencyKey: req.headers["idempotency-key"] || payload.idempotencyKey,
+      cashierId,
+      cashierName,
+      items: normalizedItems,
+      subtotal: computedSubtotal,
+      vat: sentVat,
+      total: computedSubtotal + sentVat,
+    };
+
     try {
-      const { id, createdAt } = await pos.createSale(payloadWithActor, cashierName);
-      await pos.writeAudit({
-        action: "sale_completed",
-        actorId: req.user.id,
-        actorRole: req.user.role,
-        after: {
-          saleId: id,
-          cashierId: req.user.id,
-          subtotal: payload.subtotal,
-          total: payload.total,
-          vat: payload.vat,
-          itemsCount: payload.items.length,
-          payments: payload.payments,
-        },
-        timestamp: createdAt,
-      });
-      res.status(201).json({ id, createdAt });
+      const result = await pos.createSale(payloadWithActor, cashierName);
+      if (result?.created) {
+        await pos.writeAudit({
+          action: "sale_completed",
+          actorId: req.user.id,
+          actorRole: req.user.role,
+          after: {
+            saleId: result.id,
+            cashierId: req.user.id,
+            subtotal: payloadWithActor.subtotal,
+            total: payloadWithActor.total,
+            vat: payloadWithActor.vat,
+            itemsCount: payloadWithActor.items.length,
+            payments: payloadWithActor.payments,
+          },
+          timestamp: result.createdAt,
+        });
+      }
+      res.status(201).json({ id: result.id, createdAt: result.createdAt });
     } catch (e) {
       console.error(e);
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("Insufficient stock") || msg.includes("Invalid quantity") || msg.includes("Invalid sale items") || msg.includes("Invalid lineTotal") || msg.includes("Invalid productId")) {
+        return res.status(400).json({ error: msg });
+      }
       res.status(500).json({ error: "Failed to create sale" });
     }
   });
@@ -392,7 +470,7 @@ export function createApp() {
   app.post("/api/intakes/:id/confirm", authMiddleware, requirePermission("inventory.receive.approve"), async (req, res) => {
     const { id } = req.params;
     try {
-      const result = await receiving.confirmIntake(id);
+      const result = await receiving.confirmIntake(id, { user: req.user });
       res.json(result);
     } catch (e) {
       console.error(e);
@@ -403,7 +481,7 @@ export function createApp() {
   app.post("/api/intakes/:id/blind-copy", authMiddleware, requirePermission("inventory.receive.approve"), async (req, res) => {
     const { id } = req.params;
     try {
-      const result = await receiving.generateBlindCopy(id);
+      const result = await receiving.generateBlindCopy(id, { user: req.user });
       res.json(result);
     } catch (e) {
       console.error(e);
@@ -414,7 +492,7 @@ export function createApp() {
   app.post("/api/blind-copies/:id/issue", authMiddleware, requirePermission("inventory.receive.approve"), async (req, res) => {
     const { id } = req.params;
     try {
-      const result = await receiving.issueBlindCopy(id);
+      const result = await receiving.issueBlindCopy(id, { user: req.user });
       res.json(result);
     } catch (e) {
       console.error(e);

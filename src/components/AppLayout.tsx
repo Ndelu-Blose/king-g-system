@@ -1,6 +1,7 @@
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { isCashierAllowedPath } from '@/lib/cashier-rules';
+import { canAccessRoute } from '@/lib/permissions';
 import AppSidebar from './AppSidebar';
 
 export default function AppLayout() {
@@ -10,8 +11,12 @@ export default function AppLayout() {
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (!user) return <Navigate to="/login" replace />;
 
+  // Keep existing cashier guard behavior, then apply full permission route guard for all roles.
   if (user.role === 'cashier' && !isCashierAllowedPath(pathname)) {
     return <Navigate to="/pos" replace />;
+  }
+  if (!canAccessRoute(user.role, pathname)) {
+    return <Navigate to={user.role === 'cashier' ? '/pos' : '/dashboard'} replace />;
   }
 
   return (
