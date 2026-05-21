@@ -20,21 +20,14 @@ interface Movement {
   reference?: string;
 }
 
-const mockMovements: Movement[] = [
-  { id: '1', date: '2026-02-26 14:32', type: 'SALE', product: 'Hennessy VS', qty: -2, reference: 'TXN-001' },
-  { id: '2', date: '2026-02-26 12:10', type: 'TRANSFER', product: 'Castle Lager 340ml', qty: 24, reference: 'WH → Lounge' },
-  { id: '3', date: '2026-02-26 11:00', type: 'RECEIPT', product: 'Heineken 330ml', qty: 48, reference: 'PO-102' },
-  { id: '4', date: '2026-02-25 16:45', type: 'ADJUSTMENT', product: 'Moët & Chandon', qty: -1, reference: 'Stock take' },
-  { id: '5', date: '2026-02-25 10:20', type: 'DAMAGE', product: 'Red Bull Energy', qty: -3, reference: 'Broken cans' },
-];
-
 export default function InventoryMovementsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const movements: Movement[] = [];
 
   const filtered =
     typeFilter === 'all'
-      ? mockMovements
-      : mockMovements.filter((m) => m.type === typeFilter);
+      ? movements
+      : movements.filter((m) => m.type === typeFilter);
 
   return (
     <div className="space-y-6">

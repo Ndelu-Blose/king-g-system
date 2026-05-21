@@ -2,8 +2,8 @@ import request from "supertest";
 import app from "../src/app.js";
 import { getSupabaseAdmin } from "../src/lib/supabase.js";
 
-const OWNER_EMAIL = "owner@kingg.co.za";
-const CASHIER_EMAIL = "sipho@kingg.co.za";
+const OWNER_EMAIL = process.env.TEST_OWNER_EMAIL || "test-owner@example.com";
+const CASHIER_EMAIL = process.env.TEST_CASHIER_EMAIL || "test-cashier@example.com";
 const supabaseConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 async function login(email) {
@@ -15,7 +15,7 @@ async function login(email) {
 
 function buildSalePayload() {
   return {
-    items: [{ productId: "1", name: "Johnnie Walker Black", qty: 1, unitPrice: 45, lineTotal: 45 }],
+    items: [{ productId: "1", name: "Test Product", qty: 1, unitPrice: 45, lineTotal: 45 }],
     subtotal: 45,
     vat: 0,
     total: 45,
@@ -35,8 +35,8 @@ function buildSalePayload() {
       .from("users")
       .upsert(
         [
-          { id: "1", name: "King G", email: OWNER_EMAIL, role: "owner", password_hash: null },
-          { id: "4", name: "Sipho N.", email: CASHIER_EMAIL, role: "cashier", password_hash: null },
+          { id: "test-owner", name: "Test Owner", email: OWNER_EMAIL, role: "owner", password_hash: null },
+          { id: "test-cashier", name: "Test Cashier", email: CASHIER_EMAIL, role: "cashier", password_hash: null },
         ],
         { onConflict: "id" }
       );
@@ -47,7 +47,7 @@ function buildSalePayload() {
         [
           {
             id: "1",
-            name: "Johnnie Walker Black",
+            name: "Test Product",
             barcode: "5000267024202",
             category: "Whisky",
             base_price: 45,

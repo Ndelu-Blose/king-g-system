@@ -22,45 +22,31 @@ import RefundApprovals from '@/pages/RefundApprovals';
 import VoidTransactions from '@/pages/VoidTransactions';
 import { BackButton } from '@/components/BackButton';
 
-// Mock pending item removals (pre-payment cart adjustments needing manager approval)
-const MOCK_REMOVAL_REASONS = [
+const REMOVAL_REASONS = [
   'Payment Declined',
   'Customer Changed Mind',
   'Pricing Clarification',
   'Wrong Item Scanned',
 ];
 
-const mockPendingRemovals = [
-  {
-    id: 'REM-001',
-    txnId: 'TXN-LIVE-01',
-    cashierId: '4',
-    cashierName: 'Sipho N.',
-    removedItem: 'Johnnie Walker Black',
-    itemValue: 450,
-    reason: 'Payment Declined',
-    requestedAt: '2026-03-02T14:32:00',
-    terminalId: 'T1',
-  },
-  {
-    id: 'REM-002',
-    txnId: 'TXN-LIVE-02',
-    cashierId: '4',
-    cashierName: 'Sipho N.',
-    removedItem: 'Moët & Chandon',
-    itemValue: 1200,
-    reason: 'Customer Changed Mind',
-    requestedAt: '2026-03-02T15:10:00',
-    terminalId: 'T1',
-  },
-];
+type PendingRemoval = {
+  id: string;
+  txnId: string;
+  cashierId: string;
+  cashierName: string;
+  removedItem: string;
+  itemValue: number;
+  reason: string;
+  requestedAt: string;
+  terminalId: string;
+};
 
 export default function ApprovalsQueuePage() {
   const [activeTab, setActiveTab] = useState<'removals' | 'refunds' | 'voids'>('removals');
-  const [pendingRemovals, setPendingRemovals] = useState(mockPendingRemovals);
+  const [pendingRemovals, setPendingRemovals] = useState<PendingRemoval[]>([]);
   const [approvalDialog, setApprovalDialog] = useState<{
     open: boolean;
-    removal: (typeof mockPendingRemovals)[0] | null;
+    removal: PendingRemoval | null;
     pin: string;
     reason: string;
   }>({ open: false, removal: null, pin: '', reason: '' });
@@ -68,8 +54,8 @@ export default function ApprovalsQueuePage() {
   const formatTime = (iso: string) =>
     new Date(iso).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' });
 
-  const handleRequestApproval = (removal: (typeof mockPendingRemovals)[0]) => {
-    setApprovalDialog({ open: true, removal, pin: '', reason: MOCK_REMOVAL_REASONS[0] });
+  const handleRequestApproval = (removal: PendingRemoval) => {
+    setApprovalDialog({ open: true, removal, pin: '', reason: REMOVAL_REASONS[0] });
   };
 
   const handleConfirmApproval = () => {
@@ -231,7 +217,7 @@ export default function ApprovalsQueuePage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {MOCK_REMOVAL_REASONS.map((r) => (
+                    {REMOVAL_REASONS.map((r) => (
                       <SelectItem key={r} value={r}>{r}</SelectItem>
                     ))}
                   </SelectContent>

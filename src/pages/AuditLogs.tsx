@@ -1,16 +1,6 @@
 import { Shield, Filter } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
 
-const logs = [
-  { id: 1, user: 'Sipho N.', action: 'SALE_COMPLETED', entity: 'Transaction TXN-001', details: 'R140.00 - Cash payment', timestamp: '2026-02-17 14:32:15' },
-  { id: 2, user: 'Sipho N.', action: 'SALE_COMPLETED', entity: 'Transaction TXN-002', details: 'R120.00 - Card payment', timestamp: '2026-02-17 14:15:33' },
-  { id: 3, user: 'Lerato K.', action: 'STOCK_TRANSFER', entity: 'Hennessy VS (x12)', details: 'Warehouse → Lounge', timestamp: '2026-02-17 13:45:00' },
-  { id: 4, user: 'Thabo M.', action: 'DELIVERY_RECORDED', entity: 'PO-2026-015', details: 'SA Breweries - 48 units received', timestamp: '2026-02-17 11:20:00' },
-  { id: 5, user: 'King G', action: 'VARIANCE_APPROVED', entity: 'Stock Take ST-042', details: 'Approved 3 variances', timestamp: '2026-02-17 10:00:00' },
-  { id: 6, user: 'King G', action: 'USER_CREATED', entity: 'User: new.cashier@kingg.co.za', details: 'Role: Cashier', timestamp: '2026-02-16 16:30:00' },
-  { id: 7, user: 'Sipho N.', action: 'LOGIN', entity: 'Session', details: 'POS Terminal 1', timestamp: '2026-02-17 08:00:00' },
-];
-
 const actionColors: Record<string, string> = {
   SALE_COMPLETED: 'text-success bg-success/10',
   STOCK_TRANSFER: 'text-primary bg-primary/10',
@@ -21,6 +11,8 @@ const actionColors: Record<string, string> = {
 };
 
 export default function AuditLogs() {
+  const logs: { id: number; user: string; action: string; entity: string; details: string; timestamp: string }[] = [];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -38,26 +30,43 @@ export default function AuditLogs() {
       </div>
 
       <div className="glass-card overflow-hidden">
-        <div className="space-y-0">
-          {logs.map(log => (
-            <div key={log.id} className="flex items-start gap-4 px-5 py-4 border-b border-border/50 hover:bg-secondary/20 transition-colors">
-              <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center shrink-0 mt-0.5">
-                <Shield className="w-4 h-4 text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-foreground">{log.user}</span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${actionColors[log.action] || 'text-muted-foreground bg-secondary'}`}>
-                    {log.action}
-                  </span>
-                </div>
-                <p className="text-sm text-foreground mt-1">{log.entity}</p>
-                <p className="text-xs text-muted-foreground">{log.details}</p>
-              </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">{log.timestamp}</span>
-            </div>
-          ))}
-        </div>
+        {logs.length === 0 ? (
+          <p className="px-5 py-10 text-center text-sm text-muted-foreground">
+            No audit entries yet. Activity will appear here as users work in the system.
+          </p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">User</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Action</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Entity</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Details</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log) => (
+                <tr key={log.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-medium text-foreground">{log.user}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${actionColors[log.action] ?? 'bg-secondary text-muted-foreground'}`}>
+                      {log.action}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-sm text-muted-foreground">{log.entity}</td>
+                  <td className="px-5 py-3 text-sm text-muted-foreground">{log.details}</td>
+                  <td className="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">{log.timestamp}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

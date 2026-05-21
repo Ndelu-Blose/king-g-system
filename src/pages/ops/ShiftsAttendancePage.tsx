@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
 import { CalendarClock, DollarSign, User, AlertTriangle } from 'lucide-react';
 import { getShiftHistory } from '@/lib/shift-history';
-import { mockUsers } from '@/lib/mock-data';
 import { BackButton } from '@/components/BackButton';
 
 export default function ShiftsAttendancePage() {
   const [history, setHistory] = useState(() => getShiftHistory());
-  const cashiers = useMemo(() => mockUsers.filter((u) => u.role === 'cashier'), []);
+  const cashiers = useMemo(
+    () => new Set(history.map((s) => s.cashierName)).size,
+    [history]
+  );
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-ZA', { dateStyle: 'short' });
@@ -47,7 +49,7 @@ export default function ShiftsAttendancePage() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Cashiers</p>
-            <p className="text-xl font-bold text-foreground mt-1">{cashiers.length}</p>
+            <p className="text-xl font-bold text-foreground mt-1">{cashiers}</p>
           </div>
         </div>
         <div className="glass-card p-5 flex items-start gap-4">

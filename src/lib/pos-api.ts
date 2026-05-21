@@ -1,7 +1,7 @@
 /**
- * POS API layer: calls Node backend when available, falls back to mock data.
+ * POS API layer: calls Node backend or Supabase when configured.
  */
-import { type Transaction } from './mock-data';
+import { type Transaction } from './types';
 import type { Product, SalePayload, AuditEntry, ProductWithStock } from '@/types/pos';
 import { isSupabaseConfigured, supabase } from './supabase';
 import type {
@@ -13,7 +13,9 @@ import type {
   BlindTransferCopyLine,
 } from '@/types/receiving';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
+import { getApiBase } from './api-base';
+
+const API_BASE = getApiBase();
 const TOKEN_KEY = 'kingg_token';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -62,7 +64,7 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-/** Get product by barcode; uses backend, falls back to mock. */
+/** Get product by barcode from backend or Supabase. */
 export async function getProductByBarcode(barcode: string): Promise<ProductWithStock | null> {
   const trimmed = barcode.trim();
   if (!trimmed) return null;
@@ -93,7 +95,7 @@ export async function getProductByBarcode(barcode: string): Promise<ProductWithS
   }
 }
 
-/** Search products; uses backend, falls back to mock. */
+/** Search products from backend or Supabase. */
 export async function searchProducts(query: string, limit = 20): Promise<Product[]> {
   if (isSupabaseConfigured) {
     const q = query.trim();
@@ -122,7 +124,7 @@ export async function searchProducts(query: string, limit = 20): Promise<Product
   }
 }
 
-/** Get all products; uses backend, falls back to mock. */
+/** Get all products from backend or Supabase. */
 export async function getAllProducts(): Promise<ProductWithStock[]> {
   if (isSupabaseConfigured) {
     const { data: products, error: pErr } = await supabase
@@ -152,7 +154,7 @@ export async function getAllProducts(): Promise<ProductWithStock[]> {
   }
 }
 
-/** Get categories; uses backend, falls back to mock. */
+/** Get categories from backend or Supabase. */
 export async function getCategories(): Promise<string[]> {
   if (isSupabaseConfigured) {
     const { data, error } = await supabase.from('products').select('category');
@@ -768,7 +770,7 @@ export async function getBlindCopyByIdApi(blindCopyId: string): Promise<BlindCop
 /** Fetch all transactions from the database (real-time). Optional cashierId to filter. */
 export async function getTransactionsFromApi(cashierId?: string | null): Promise<Transaction[]> {
   if (!isSupabaseConfigured) {
-    throw new Error('Supabase is not configured for transactions');
+    return [];
   }
 
   let salesReq = supabase.from('sales').select('*').order('created_at', { ascending: false });

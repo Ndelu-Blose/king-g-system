@@ -6,7 +6,7 @@ import {
   useEffect,
   type ReactNode,
 } from 'react';
-import type { Transaction } from '@/lib/mock-data';
+import type { Transaction } from '@/lib/types';
 
 const STORAGE_KEY = 'kingg_shift';
 

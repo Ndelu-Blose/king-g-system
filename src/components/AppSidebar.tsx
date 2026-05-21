@@ -1,6 +1,6 @@
 import { useAuth } from '@/lib/auth-context';
 import { useShift } from '@/contexts/ShiftContext';
-import { roleLabels } from '@/lib/mock-data';
+import { roleLabels } from '@/lib/types';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,

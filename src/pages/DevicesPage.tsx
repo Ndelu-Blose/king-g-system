@@ -15,6 +15,12 @@ import { BackButton } from '@/components/BackButton';
 
 const STORAGE_KEY = 'kingg-devices';
 
+/** Legacy seeded terminals shipped with early demos — strip on load. */
+const LEGACY_MOCK_TERMINALS = new Set([
+  'T-001',
+  'T-002',
+]);
+
 interface Terminal {
   id: string;
   name: string;
@@ -27,18 +33,27 @@ interface Terminal {
 function loadDevices(): Terminal[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const filtered = parsed.filter(
+      (d: Terminal) => d?.terminalId && !LEGACY_MOCK_TERMINALS.has(String(d.terminalId).toUpperCase())
+    );
+    if (filtered.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    }
+    return filtered;
   } catch {
-    // ignore
+    return [];
   }
-  return [
-    { id: '1', name: 'POS 1', terminalId: 'T-001', location: 'Main bar', registeredAt: '2026-01-15', active: true },
-    { id: '2', name: 'POS 2', terminalId: 'T-002', location: 'Lounge', registeredAt: '2026-01-15', active: true },
-  ];
 }
 
 function saveDevices(devices: Terminal[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(devices));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(devices));
+  } catch {
+    // ignore
+  }
 }
 
 export default function DevicesPage() {
@@ -108,23 +123,31 @@ export default function DevicesPage() {
             </tr>
           </thead>
           <tbody>
-            {devices.map((d) => (
-              <tr key={d.id} className="border-b border-border/50 hover:bg-muted/20">
-                <td className="px-5 py-3 font-medium text-foreground">{d.name}</td>
-                <td className="px-5 py-3 text-muted-foreground">{d.terminalId}</td>
-                <td className="px-5 py-3 text-muted-foreground">{d.location}</td>
-                <td className="px-5 py-3 text-muted-foreground">{d.registeredAt}</td>
-                <td className="px-5 py-3">
-                  {d.active ? (
-                    <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                      <Check className="h-3.5 w-3.5" /> Active
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Inactive</span>
-                  )}
+            {devices.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted-foreground">
+                  No terminals registered yet. Use Register terminal to add your first POS device.
                 </td>
               </tr>
-            ))}
+            ) : (
+              devices.map((d) => (
+                <tr key={d.id} className="border-b border-border/50 hover:bg-muted/20">
+                  <td className="px-5 py-3 font-medium text-foreground">{d.name}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{d.terminalId}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{d.location}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{d.registeredAt}</td>
+                  <td className="px-5 py-3">
+                    {d.active ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                        <Check className="h-3.5 w-3.5" /> Active
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Inactive</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -140,7 +163,7 @@ export default function DevicesPage() {
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. POS 3"
+                placeholder="Terminal name"
               />
             </div>
             <div className="space-y-2">
@@ -148,7 +171,7 @@ export default function DevicesPage() {
               <Input
                 value={terminalId}
                 onChange={(e) => setTerminalId(e.target.value)}
-                placeholder="e.g. T-003"
+                placeholder="Unique terminal ID"
               />
             </div>
             <div className="space-y-2">
@@ -156,7 +179,7 @@ export default function DevicesPage() {
               <Input
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Patio"
+                placeholder="Location"
               />
             </div>
           </div>

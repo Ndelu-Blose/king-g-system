@@ -3,7 +3,8 @@
  * Uses Node crypto for HMAC-SHA256 signed tokens (no external JWT lib).
  */
 import crypto from 'crypto';
-import { getUserByEmail } from './src/services/pos.service.js';
+import { getUserByEmail } from './src/services/users.service.js';
+import { verifyPassword } from './src/lib/passwords.js';
 
 const SECRET = process.env.JWT_SECRET || 'kingg-pos-dev-secret-change-in-production';
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
@@ -24,29 +25,57 @@ function verify(token) {
   if (sig !== expected) return null;
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    if (payload.exp && Date.now() > payload.exp) return null;
+    if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
     return payload;
   } catch {
     return null;
   }
 }
 
+function credentialsValid(user, password) {
+  if (!password || !String(password).length) return false;
+  if (user.passwordHash) {
+    return verifyPassword(password, user.passwordHash);
+  }
+  // Legacy dev users without a hash: any non-empty password still works.
+  return true;
+}
+
 /**
  * POST /api/auth/login body: { email, password }.
- * Returns { token, user: { id, name, email, role } }. Password ignored for dev (no hash stored).
+ * Returns { token, user: { id, name, email, role } }.
  */
+/**
+ * GET /api/auth/me — current user from Bearer token.
+ */
+export function meHandler(req, res) {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  return res.json({
+    user: {
+      id: req.user.id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+    },
+  });
+}
+
 export function loginHandler(req, res) {
   const { email, password } = req.body || {};
   if (!email || !String(email).trim()) {
     return res.status(400).json({ error: 'Email required' });
   }
-  // Supabase-backed dev login (password ignored, as before).
+  if (!password || !String(password).length) {
+    return res.status(400).json({ error: 'Password required' });
+  }
+
   getUserByEmail(String(email).trim())
     .then((user) => {
-      if (!user) {
+      if (!user || user.active === false || !credentialsValid(user, password)) {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
-      // In production: verify password against user.password_hash. For dev we accept any.
       const payload = {
         userId: user.id,
         role: user.role,
@@ -62,7 +91,6 @@ export function loginHandler(req, res) {
       console.error(e);
       return res.status(500).json({ error: 'Login failed' });
     });
-  // In production: verify password against user.password_hash. For dev we accept any.
 }
 
 /**

@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useInventory } from '@/contexts/InventoryContext';
+import { getSupplierNames } from '@/lib/suppliers-store';
 import { toast } from 'sonner';
 
 interface Delivery {
@@ -27,18 +28,11 @@ interface Delivery {
   podFileName?: string;
 }
 
-const initialDeliveries: Delivery[] = [
-  { id: '1', date: '2026-02-26', supplier: 'SA Breweries', poRef: 'PO-102', status: 'received', invoiceRef: 'INV-2026-089' },
-  { id: '2', date: '2026-02-25', supplier: 'Distell', poRef: 'PO-101', status: 'received', invoiceRef: 'INV-2026-088' },
-  { id: '3', date: '2026-02-24', supplier: 'Coca-Cola', poRef: 'PO-100', status: 'partial' },
-];
-
-const supplierOptions = ['SA Breweries', 'Distell Group', 'Pernod Ricard SA', 'Coca-Cola Beverages'];
-
 export default function DeliveriesPage() {
   const { inventory } = useInventory();
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [deliveries, setDeliveries] = useState<Delivery[]>(initialDeliveries);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const supplierOptions = getSupplierNames();
 
   const [recordPoRef, setRecordPoRef] = useState('');
   const [recordSupplier, setRecordSupplier] = useState('');
@@ -176,16 +170,25 @@ export default function DeliveriesPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="supplier">Supplier</Label>
-              <Select value={recordSupplier} onValueChange={setRecordSupplier}>
-                <SelectTrigger id="supplier">
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {supplierOptions.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {supplierOptions.length > 0 ? (
+                <Select value={recordSupplier} onValueChange={setRecordSupplier}>
+                  <SelectTrigger id="supplier">
+                    <SelectValue placeholder="Select supplier" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supplierOptions.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="supplier"
+                  value={recordSupplier}
+                  onChange={(e) => setRecordSupplier(e.target.value)}
+                  placeholder="Supplier name"
+                />
+              )}
             </div>
           </div>
           <div className="space-y-2">
@@ -254,6 +257,13 @@ export default function DeliveriesPage() {
             </tr>
           </thead>
           <tbody>
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted-foreground">
+                  No deliveries recorded yet.
+                </td>
+              </tr>
+            )}
             {filtered.map((d) => (
               <tr key={d.id} className="border-b border-border/50 hover:bg-muted/20">
                 <td className="px-5 py-3 text-foreground">{d.date}</td>

@@ -1,10 +1,11 @@
 import express from "express";
 import cors from "cors";
 
-import { loginHandler, authMiddleware } from "../auth.js";
+import { loginHandler, meHandler, authMiddleware } from "../auth.js";
 import { requirePermission, requireAuth } from "../permissions.js";
 import { listReports } from "./services/reports.service.js";
 import * as pos from "./services/pos.service.js";
+import * as users from "./services/users.service.js";
 import * as receiving from "./services/receiving.service.js";
 
 export function createApp() {
@@ -14,6 +15,7 @@ export function createApp() {
 
   // --- Auth (no auth middleware) ---
   app.post("/api/auth/login", loginHandler);
+  app.get("/api/auth/me", authMiddleware, meHandler);
 
   // --- Products (Supabase) ---
   app.get("/api/products", async (_req, res) => {
@@ -239,6 +241,71 @@ export function createApp() {
     } catch (e) {
       console.error(e);
       res.status(500).json({ error: "Failed to write audit" });
+    }
+  });
+
+  // --- User management (owner) ---
+  app.get("/api/users", authMiddleware, requirePermission("admin.users"), async (_req, res) => {
+    try {
+      res.json(await users.listUsers());
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Failed to load users";
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  app.post("/api/users", authMiddleware, requirePermission("admin.users"), async (req, res) => {
+    try {
+      const created = await users.createUser(req.body || {});
+      res.status(201).json(created);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Failed to create user";
+      res.status(400).json({ error: msg });
+    }
+  });
+
+  app.patch("/api/users/:id", authMiddleware, requirePermission("admin.users"), async (req, res) => {
+    const { id } = req.params;
+    const body = req.body || {};
+    if (body.active === false && req.user?.id === id) {
+      return res.status(400).json({ error: "You cannot deactivate your own account" });
+    }
+    try {
+      res.json(await users.updateUser(id, body));
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Failed to update user";
+      res.status(400).json({ error: msg });
+    }
+  });
+
+  app.patch("/api/users/:id/password", authMiddleware, requirePermission("admin.users"), async (req, res) => {
+    const { id } = req.params;
+    const password = req.body?.password;
+    try {
+      await users.updateUserPassword(id, password);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Failed to change password";
+      res.status(400).json({ error: msg });
+    }
+  });
+
+  app.delete("/api/users/:id", authMiddleware, requirePermission("admin.users"), async (req, res) => {
+    const { id } = req.params;
+    if (req.user?.id === id) {
+      return res.status(400).json({ error: "You cannot delete your own account" });
+    }
+    try {
+      await users.deleteUser(id);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Failed to delete user";
+      res.status(400).json({ error: msg });
     }
   });
 

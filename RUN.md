@@ -20,7 +20,7 @@
 
 Open the URL shown (e.g. `http://localhost:8080`). The app will proxy `/api` to the server. Sales, inventory, help requests, and intakes refresh from Supabase (real-time).
 
-If you skip step 1, the app still runs but uses mock data and in-memory fallbacks; no persistence.
+If you skip step 1, the app still runs but lists and reports stay empty until Supabase (or the API) is configured.
 
 ## "Can't reach this page" / Connection timeout
 
@@ -46,7 +46,7 @@ If you get **ERR_CONNECTION_TIMED_OUT** when opening `http://10.15.12.115:8080`:
 
 ## Login
 
-Use **owner@kingg.co.za** (any password) to sign in. Cashier: **sipho@kingg.co.za**.
+Owner: **goodwill.madlazi@gmail.com** / **KING123**
 
 ---
 

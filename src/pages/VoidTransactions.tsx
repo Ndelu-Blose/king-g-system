@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Ban } from 'lucide-react';
-import { mockTransactions } from '@/lib/mock-data';
 import { Button } from '@/components/ui/button';
 import { AuthorizeVoidDialog } from '@/components/AuthorizeVoidDialog';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
-import type { Transaction } from '@/lib/mock-data';
+import { getTransactionsFromApi } from '@/lib/pos-api';
+import type { Transaction } from '@/lib/types';
 import { BackButton } from '@/components/BackButton';
 
 interface VoidTransactionsProps {
@@ -14,12 +15,17 @@ interface VoidTransactionsProps {
 
 export default function VoidTransactions({ hideTitle }: VoidTransactionsProps) {
   const { user } = useAuth();
-  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions);
+  const { data: apiTransactions = [] } = useQuery({
+    queryKey: ['transactions', 'voids'],
+    queryFn: () => getTransactionsFromApi(null),
+  });
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
+  const transactions = apiTransactions.filter((t) => !hiddenIds.has(t.id));
   const [voidTarget, setVoidTarget] = useState<Transaction | null>(null);
 
   const handleVoidConfirm = (_pin: string, _reason: string) => {
     if (!voidTarget) return;
-    setTransactions((prev) => prev.filter((t) => t.id !== voidTarget.id));
+    setHiddenIds((prev) => new Set(prev).add(voidTarget.id));
     setVoidTarget(null);
     toast.success(`Transaction ${voidTarget.id} voided. Authorized by ${user?.name ?? 'manager'}.`);
   };
