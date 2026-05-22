@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { mockProducts as initialMockProducts } from '@/lib/mock-data';
-import type { Product } from '@/lib/mock-data';
+import { getAllProducts } from '@/lib/pos-api';
+import type { Product } from '@/lib/types';
 import { useHappyHour } from '@/contexts/HappyHourContext';
 import { Search, Plus, Edit, Package, Percent, Sparkles, Pencil, Trash2 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -28,7 +28,37 @@ import { BackButton } from '@/components/BackButton';
 const CATEGORY_OPTIONS = ['Whisky', 'Cognac', 'Champagne', 'Vodka', 'Gin', 'Tequila', 'Beer', 'Liqueur', 'Mixers', 'Other'];
 
 export default function Products() {
-  const [products, setProducts] = useState<Product[]>(initialMockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAllProducts()
+      .then((rows) => {
+        if (!cancelled) {
+          setProducts(
+            rows.map((p) => ({
+              id: p.id,
+              name: p.name,
+              barcode: p.barcode,
+              category: p.category,
+              basePrice: p.basePrice,
+              costPrice: p.costPrice,
+              image: p.image,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setProducts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProducts(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [search, setSearch] = useState('');
   const { user } = useAuth();
   const {
@@ -197,7 +227,9 @@ export default function Products() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Products</h1>
-          <p className="text-sm text-muted-foreground">{products.length} products registered</p>
+          <p className="text-sm text-muted-foreground">
+            {loadingProducts ? 'Loading products…' : `${products.length} products registered`}
+          </p>
         </div>
         <button
           type="button"

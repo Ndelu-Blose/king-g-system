@@ -20,7 +20,7 @@
 
 Open the URL shown (e.g. `http://localhost:8080`). The app will proxy `/api` to the server. Sales, inventory, help requests, and intakes refresh from Supabase (real-time).
 
-If you skip step 1, the app still runs but uses mock data and in-memory fallbacks; no persistence.
+If you skip step 1, the app still runs but lists and reports stay empty until Supabase (or the API) is configured.
 
 ## "Can't reach this page" / Connection timeout
 
@@ -46,7 +46,25 @@ If you get **ERR_CONNECTION_TIMED_OUT** when opening `http://10.15.12.115:8080`:
 
 ## Login
 
-Use **owner@kingg.co.za** (any password) to sign in. Cashier: **sipho@kingg.co.za**.
+Sign in with an account in Supabase `public.users`. Every user must have a `password_hash` set (no passwordless logins).
+
+### Owner / first user
+
+1. Add an owner row in `public.users` (Supabase Table Editor or SQL), **or** use **User Management** after an existing owner is signed in.
+2. Set the password via **User Management → Change password**, or locally:
+
+   ```bash
+   cd server
+   set OWNER_EMAIL=you@example.com
+   set OWNER_PASSWORD=your-secure-password
+   node scripts/set-user-password.js
+   ```
+
+   (On macOS/Linux use `export OWNER_EMAIL=...` and `export OWNER_PASSWORD=...`.)
+
+### If a password was ever committed to git or shared
+
+Rotate it immediately using User Management or `scripts/set-user-password.js`. Never put real passwords in `RUN.md`, `.env.example`, or other tracked files.
 
 ---
 

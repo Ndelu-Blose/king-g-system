@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useHappyHour } from '@/contexts/HappyHourContext';
-import { mockProducts } from '@/lib/mock-data';
+import { getAllProducts } from '@/lib/pos-api';
 import {
   loadDiscountRules,
   saveDiscountRules,
@@ -25,8 +25,13 @@ export default function DiscountRulesPage() {
   const [config, setConfig] = useState<DiscountRulesConfig>(loadDiscountRules);
   const [saved, setSaved] = useState(false);
 
+  const [products, setProducts] = useState<{ id: string; name: string }[]>([]);
+
   useEffect(() => {
     setConfig(loadDiscountRules());
+    getAllProducts()
+      .then((rows) => setProducts(rows.map((p) => ({ id: p.id, name: p.name }))))
+      .catch(() => setProducts([]));
   }, []);
 
   const handleSave = () => {
@@ -114,7 +119,7 @@ export default function DiscountRulesPage() {
                   </p>
                   <ScrollArea className="h-[220px] rounded-md border border-border p-3">
                     <div className="space-y-2">
-                      {mockProducts.map((product) => {
+                      {products.map((product) => {
                         const checked = config.happyHourProductIds.includes(product.id);
                         return (
                           <label

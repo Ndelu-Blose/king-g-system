@@ -16,8 +16,7 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { BackButton } from '@/components/BackButton';
-
-const SUPPLIER_OPTIONS = ['SA Breweries', 'Distell Group', 'Pernod Ricard SA', 'Coca-Cola Beverages'];
+import { getSupplierNames } from '@/lib/suppliers-store';
 
 const DISCREPANCY_REASONS = [
   'Supplier short delivery',
@@ -61,6 +60,7 @@ export default function ReceiveStockPage() {
   const [addBatch, setAddBatch] = useState('');
   const [addDeliveryDate, setAddDeliveryDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
+  const supplierOptions = getSupplierNames();
   const canProceedStep1 = supplier.trim() && invoiceNumber.trim() && deliveryReference.trim();
   const canProceedStep2 = lines.length > 0;
   const canProceedStep3 = verifiedLines.length === lines.length && verifiedLines.every((l) => l.actualQuantity >= 0);
@@ -213,16 +213,25 @@ export default function ReceiveStockPage() {
           </div>
           <div className="space-y-2">
             <Label>Supplier</Label>
-            <Select value={supplier} onValueChange={setSupplier} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Select supplier" />
-              </SelectTrigger>
-              <SelectContent>
-                {SUPPLIER_OPTIONS.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {supplierOptions.length > 0 ? (
+              <Select value={supplier} onValueChange={setSupplier} required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select supplier" />
+                </SelectTrigger>
+                <SelectContent>
+                  {supplierOptions.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={supplier}
+                onChange={(e) => setSupplier(e.target.value)}
+                placeholder="Supplier name"
+                required
+              />
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="invoice">Invoice number</Label>

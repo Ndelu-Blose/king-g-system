@@ -20,14 +20,6 @@ interface ActivityRecord {
   detail?: string;
 }
 
-const mockActivity: ActivityRecord[] = [
-  { id: '1', time: '2026-02-26 14:35', user: 'King G', type: 'login', action: 'Login', detail: 'Owner' },
-  { id: '2', time: '2026-02-26 14:20', user: 'Thabo M.', type: 'approval', action: 'Approved refund', detail: 'REF-001' },
-  { id: '3', time: '2026-02-26 13:50', user: 'Sipho N.', type: 'action', action: 'Void transaction', detail: 'TXN-004' },
-  { id: '4', time: '2026-02-26 12:00', user: 'Lerato K.', type: 'login', action: 'Login', detail: 'Manager' },
-  { id: '5', time: '2026-02-26 11:45', user: 'Thabo M.', type: 'approval', action: 'Approved stock adjustment', detail: 'Adj-012' },
-];
-
 function IconForType({ type }: { type: ActivityType }) {
   if (type === 'login') return <LogIn className="h-4 w-4" />;
   if (type === 'approval') return <UserCheck className="h-4 w-4" />;
@@ -37,10 +29,11 @@ function IconForType({ type }: { type: ActivityType }) {
 export default function UserActivityPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
+  const activity: ActivityRecord[] = [];
   const filtered =
     typeFilter === 'all'
-      ? mockActivity
-      : mockActivity.filter((a) => a.type === typeFilter);
+      ? activity
+      : activity.filter((a) => a.type === typeFilter);
 
   return (
     <div className="space-y-6">

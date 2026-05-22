@@ -590,29 +590,6 @@ export async function markHelpRequestAcknowledged(id, acknowledgedBy) {
   if (error) throw error;
 }
 
-export async function getUserByEmail(email) {
-  const client = await supabase();
-  const needle = String(email || "").trim().toLowerCase();
-  if (!needle) return null;
-
-  const { data, error } = await client
-    .from("users")
-    .select("id,name,email,role")
-    .ilike("email", needle)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return { id: data.id, name: data.name, email: data.email, role: data.role };
-}
-
-export async function getUserById(id) {
-  const client = await supabase();
-  const { data, error } = await client.from("users").select("id,name,email,role").eq("id", id).maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
-  return { id: data.id, name: data.name, email: data.email, role: data.role };
-}
-
 export async function getSettings() {
   const client = await supabase();
   const { data, error } = await client.from("venue_settings").select("key,value");

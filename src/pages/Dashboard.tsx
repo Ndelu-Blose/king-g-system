@@ -1,9 +1,17 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { BackButton } from '@/components/BackButton';
-import { dailyStats, weeklySalesData, categorySalesData, mockTransactions } from '@/lib/mock-data';
 import { getDiscrepancies } from '@/lib/ops-store';
 import { getShiftHistory } from '@/lib/shift-history';
+import { getTransactionsFromApi } from '@/lib/pos-api';
+import {
+  categorySalesFromTransactions,
+  summarizeTransactions,
+  weeklySalesFromTransactions,
+} from '@/lib/sales-stats';
+import { emptyDailyStats } from '@/lib/types';
 import {
   DollarSign,
   TrendingUp,
@@ -28,15 +36,8 @@ import {
   Cell,
 } from 'recharts';
 
-const statCards = [
-  { label: "Today's sales", value: `R${dailyStats.totalSales.toLocaleString()}`, icon: DollarSign },
-  { label: 'Transactions', value: dailyStats.transactionCount.toString(), icon: ShoppingCart },
-  { label: 'Avg. transaction', value: `R${dailyStats.avgTransaction.toFixed(0)}`, icon: TrendingUp },
-  { label: 'Pending approvals', value: dailyStats.pendingApprovals.toString(), icon: AlertTriangle },
-];
-
 /** Operations dashboard for managers: at a glance and items needing attention. */
-function ManagerOpsDashboard() {
+function ManagerOpsDashboard({ stats }: { stats: typeof emptyDailyStats }) {
   const openDiscrepancies = getDiscrepancies().filter((r) => !r.resolved).length;
   const shiftHistory = getShiftHistory();
   const shiftsWithVariance = shiftHistory.filter((s) => s.variance !== 0).length;
@@ -55,11 +56,11 @@ function ManagerOpsDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="rounded-xl border border-border bg-card p-5">
             <p className="text-xs font-medium text-muted-foreground">Sales</p>
-            <p className="text-xl font-semibold text-foreground mt-1 tabular-nums">R{dailyStats.totalSales.toLocaleString()}</p>
+            <p className="text-xl font-semibold text-foreground mt-1 tabular-nums">R{stats.totalSales.toLocaleString()}</p>
           </div>
           <div className="rounded-xl border border-border bg-card p-5">
             <p className="text-xs font-medium text-muted-foreground">Transactions</p>
-            <p className="text-xl font-semibold text-foreground mt-1 tabular-nums">{dailyStats.transactionCount}</p>
+            <p className="text-xl font-semibold text-foreground mt-1 tabular-nums">{stats.transactionCount}</p>
           </div>
           <div className="rounded-xl border border-border bg-card p-5">
             <p className="text-xs font-medium text-muted-foreground">Open discrepancies</p>
@@ -103,17 +104,52 @@ export default function Dashboard() {
   const isOwner = user?.role === 'owner';
   const showRecentTransactions = isOwner || user?.role === 'senior_manager';
 
+  const { data: allTransactions = [] } = useQuery({
+    queryKey: ['transactions', 'dashboard', user?.id],
+    queryFn: () => getTransactionsFromApi(isCashier ? user?.id ?? null : null),
+    enabled: !!user,
+  });
+
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
+
+  const todayTransactions = useMemo(
+    () => allTransactions.filter((t) => new Date(t.createdAt) >= todayStart),
+    [allTransactions, todayStart]
+  );
+
+  const stats = useMemo(
+    () => (todayTransactions.length ? summarizeTransactions(todayTransactions) : emptyDailyStats),
+    [todayTransactions]
+  );
+
+  const weeklySalesData = useMemo(() => weeklySalesFromTransactions(allTransactions), [allTransactions]);
+  const categorySalesData = useMemo(() => categorySalesFromTransactions(allTransactions), [allTransactions]);
+  const recentTransactions = useMemo(() => allTransactions.slice(0, 5), [allTransactions]);
+
+  const cashPct =
+    stats.totalSales > 0 ? Math.round((stats.cashSales / stats.totalSales) * 100) : 0;
+  const cardPct = stats.totalSales > 0 ? 100 - cashPct : 0;
+
+  const statCards = [
+    { label: "Today's sales", value: `R${stats.totalSales.toLocaleString()}`, icon: DollarSign },
+    { label: 'Transactions', value: stats.transactionCount.toString(), icon: ShoppingCart },
+    { label: 'Avg. transaction', value: `R${stats.avgTransaction.toFixed(0)}`, icon: TrendingUp },
+    { label: 'Pending approvals', value: stats.pendingApprovals.toString(), icon: AlertTriangle },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <BackButton />
       </div>
-      {/* Manager: simple ops dashboard */}
       {isManager && !isOwner ? (
-        <ManagerOpsDashboard />
+        <ManagerOpsDashboard stats={stats} />
       ) : (
       <>
-      {/* Header for non-manager (owner/cashier) */}
       {!isManager && (
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">Dashboard</h1>
@@ -133,7 +169,7 @@ export default function Dashboard() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">Your sales</p>
-                  <p className="text-xl font-semibold text-foreground mt-1 tabular-nums">R{dailyStats.totalSales.toLocaleString()}</p>
+                  <p className="text-xl font-semibold text-foreground mt-1 tabular-nums">R{stats.totalSales.toLocaleString()}</p>
                 </div>
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <DollarSign className="w-5 h-5 text-primary" />
@@ -144,7 +180,7 @@ export default function Dashboard() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground">Transactions</p>
-                  <p className="text-xl font-semibold text-foreground mt-1 tabular-nums">{dailyStats.transactionCount}</p>
+                  <p className="text-xl font-semibold text-foreground mt-1 tabular-nums">{stats.transactionCount}</p>
                 </div>
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <ShoppingCart className="w-5 h-5 text-primary" />
@@ -179,6 +215,7 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
               <h3 className="text-sm font-semibold text-foreground mb-4">Weekly sales</h3>
+              {weeklySalesData.some((d) => d.sales > 0) ? (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={weeklySalesData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 15% 20%)" />
@@ -191,10 +228,15 @@ export default function Dashboard() {
                   <Bar dataKey="sales" fill="hsl(32 45% 58%)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-muted-foreground py-8 text-center">No sales data yet.</p>
+              )}
             </div>
 
             <div className="rounded-xl border border-border bg-card p-5">
               <h3 className="text-sm font-semibold text-foreground mb-4">Sales by category</h3>
+              {categorySalesData.length > 0 ? (
+              <>
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie data={categorySalesData} dataKey="value" nameKey="category" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}>
@@ -216,6 +258,10 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+              </>
+              ) : (
+                <p className="text-sm text-muted-foreground py-8 text-center">No category breakdown yet.</p>
+              )}
             </div>
           </div>
           </section>
@@ -232,9 +278,9 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-muted-foreground">Cash</p>
-                    <p className="text-lg font-semibold text-foreground tabular-nums">R{dailyStats.cashSales.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-foreground tabular-nums">R{stats.cashSales.toLocaleString()}</p>
                   </div>
-                  <span className="text-sm text-muted-foreground">58%</span>
+                  <span className="text-sm text-muted-foreground">{cashPct}%</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -242,9 +288,9 @@ export default function Dashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-muted-foreground">Card</p>
-                    <p className="text-lg font-semibold text-foreground tabular-nums">R{dailyStats.cardSales.toLocaleString()}</p>
+                    <p className="text-lg font-semibold text-foreground tabular-nums">R{stats.cardSales.toLocaleString()}</p>
                   </div>
-                  <span className="text-sm text-muted-foreground">42%</span>
+                  <span className="text-sm text-muted-foreground">{cardPct}%</span>
                 </div>
               </div>
             </div>
@@ -253,7 +299,10 @@ export default function Dashboard() {
             <div className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
               <h3 className="text-sm font-semibold text-foreground mb-4">Recent transactions</h3>
               <div className="space-y-3">
-                {mockTransactions.map((txn) => (
+                {recentTransactions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-4">No transactions yet.</p>
+                ) : (
+                recentTransactions.map((txn) => (
                   <div key={txn.id} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
@@ -275,7 +324,8 @@ export default function Dashboard() {
                       <p className="text-xs text-muted-foreground capitalize">{txn.paymentMethod}</p>
                     </div>
                   </div>
-                ))}
+                ))
+                )}
               </div>
             </div>
           ) : (

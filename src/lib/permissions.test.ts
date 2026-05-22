@@ -7,7 +7,7 @@ import {
   PERMISSIONS,
   ROLE_PERMISSIONS,
 } from './permissions';
-import type { UserRole } from './mock-data';
+import type { UserRole } from './types';
 
 describe('permissions', () => {
   it('owner has sale.create and refund.approve', () => {

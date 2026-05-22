@@ -1,4 +1,7 @@
-import { useState, Fragment } from 'react';
+import { useState, Fragment, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { getAllProducts } from '@/lib/pos-api';
+import { getSupplierNames } from '@/lib/suppliers-store';
 import { Link } from 'react-router-dom';
 import { FileText, Plus, Send, Truck } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
@@ -22,7 +25,6 @@ import {
 import { toast } from 'sonner';
 import {
   usePurchaseOrders,
-  poProductList,
   type PurchaseOrder,
   type POLineItem,
 } from '@/contexts/PurchaseOrderContext';
@@ -38,9 +40,11 @@ const approvalColors: Record<string, string> = {
   rejected: 'bg-destructive/10 text-destructive',
 };
 
-const supplierOptions = ['SA Breweries', 'Distell Group', 'Pernod Ricard SA', 'Coca-Cola Beverages'];
-
 export default function PurchaseOrdersPage() {
+  const { data: poProductList = [] } = useQuery({
+    queryKey: ['products', 'po'],
+    queryFn: getAllProducts,
+  });
   const {
     orders,
     addOrder,
@@ -60,6 +64,11 @@ export default function PurchaseOrdersPage() {
   const [receivePoId, setReceivePoId] = useState<string | null>(null);
   const [deliveryInvoiceUrl, setDeliveryInvoiceUrl] = useState('');
   const [deliveredQtys, setDeliveredQtys] = useState<Record<string, string>>({});
+  const [supplierOptions, setSupplierOptions] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (createPoOpen) setSupplierOptions(getSupplierNames());
+  }, [createPoOpen]);
 
   const handleStartCreate = () => {
     setCreateStep('supplier');
@@ -292,16 +301,29 @@ export default function PurchaseOrdersPage() {
             <div className="grid gap-4 py-2">
               <div className="grid gap-2">
                 <Label>Supplier</Label>
-                <Select value={createSupplier} onValueChange={setCreateSupplier}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select supplier" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {supplierOptions.map((s) => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {supplierOptions.length > 0 ? (
+                  <Select value={createSupplier} onValueChange={setCreateSupplier}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select supplier" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {supplierOptions.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <>
+                    <Input
+                      value={createSupplier}
+                      onChange={(e) => setCreateSupplier(e.target.value)}
+                      placeholder="Supplier name"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Add suppliers on the Suppliers page to pick from a list next time.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           ) : (

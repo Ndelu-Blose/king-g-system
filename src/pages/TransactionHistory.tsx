@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { mockTransactions, type Transaction } from '@/lib/mock-data';
+import type { Transaction } from '@/lib/types';
 import { getTransactionsFromApi } from '@/lib/pos-api';
 import { useShift } from '@/contexts/ShiftContext';
 import { History, User, CreditCard, Banknote, Clock } from 'lucide-react';
@@ -18,7 +18,7 @@ export default function TransactionHistory() {
 
   const allTransactions: Transaction[] = Array.isArray(apiTransactions)
     ? apiTransactions
-    : [...mockTransactions, ...sessionSales].sort(
+    : [...sessionSales].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
 

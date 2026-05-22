@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
-import { ChevronDown, ChevronUp, Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showDemo, setShowDemo] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { login } = useAuth();
@@ -17,14 +16,14 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (submitting) return;
-    setSubmitting(true);
     setError('');
+    setSubmitting(true);
     try {
-      const loggedInUser = await login(email, password);
-      if (loggedInUser) {
-        navigate(loggedInUser.role === 'cashier' ? '/pos' : '/dashboard');
+      const outcome = await login(email, password);
+      if ('user' in outcome) {
+        navigate(outcome.user.role === 'cashier' ? '/pos' : '/dashboard');
       } else {
-        setError('Invalid credentials. Try: owner@kingg.co.za');
+        setError(outcome.error);
       }
     } finally {
       setSubmitting(false);
@@ -33,13 +32,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
-      {/* Ambient glows */}
       <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[760px] h-[760px] rounded-full opacity-10 blur-3xl gold-gradient pointer-events-none" />
       <div className="absolute top-20 left-0 w-[420px] h-[420px] rounded-full opacity-10 blur-3xl gold-gradient pointer-events-none" />
 
       <div className="relative max-w-6xl mx-auto px-4 py-12">
         <div className="grid lg:grid-cols-2 gap-10 items-center">
-          {/* Brand block (top/left) */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
@@ -101,7 +98,6 @@ export default function Login() {
             </div>
           </motion.div>
 
-          {/* Login card (right/bottom) */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
@@ -128,7 +124,7 @@ export default function Login() {
                     value={email}
                     onChange={e => setEmail(e.target.value)}
                     className="w-full h-12 px-4 rounded-xl bg-secondary/40 border border-border/70 text-foreground placeholder:text-muted-foreground shadow-inner focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors"
-                    placeholder="you@kingg.co.za"
+                    placeholder="your@email.com"
                     required
                     autoComplete="email"
                   />
@@ -143,7 +139,7 @@ export default function Login() {
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                    className="w-full h-12 px-4 rounded-xl bg-secondary/40 border border-border/70 text-foreground placeholder:text-muted-foreground shadow-inner focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors pr-12"
+                      className="w-full h-12 px-4 rounded-xl bg-secondary/40 border border-border/70 text-foreground placeholder:text-muted-foreground shadow-inner focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] focus:border-transparent transition-colors pr-12"
                       placeholder="Enter password"
                       required
                       autoComplete="current-password"
@@ -164,57 +160,11 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full h-12 rounded-xl gold-gradient text-primary-foreground font-semibold text-base hover:opacity-95 transition-all gold-glow transform-gpu hover:-translate-y-[1px] focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] active:translate-y-0"
+                  className="w-full h-12 rounded-xl gold-gradient text-primary-foreground font-semibold text-base hover:opacity-95 transition-all gold-glow transform-gpu hover:-translate-y-[1px] focus:outline-none focus:ring-2 focus:ring-[hsl(32_45%_58%_/_0.55)] active:translate-y-0 disabled:opacity-60"
                 >
-                  {submitting ? 'Signing in...' : 'Sign In'}
+                  {submitting ? 'Signing in…' : 'Sign In'}
                 </button>
               </form>
-
-              {/* Demo accounts */}
-              <div className="mt-8 pt-6 border-t border-border/60">
-                <button
-                  type="button"
-                  onClick={() => setShowDemo(v => !v)}
-                  className="w-full flex items-center justify-between gap-4 text-left"
-                  aria-expanded={showDemo}
-                >
-                  <span className="text-sm font-medium text-foreground">
-                    Demo accounts
-                  </span>
-                  <span className="text-muted-foreground">
-                    {showDemo ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </span>
-                </button>
-
-                {showDemo && (
-                  <>
-                    <p className="text-xs text-muted-foreground mt-3 mb-4">
-                      Demo accounts (any password):
-                    </p>
-                    <div className="grid sm:grid-cols-2 gap-3">
-                      {[
-                        { email: 'owner@kingg.co.za', role: 'Owner' },
-                        { email: 'thabo@kingg.co.za', role: 'Sr. Manager' },
-                        { email: 'lerato@kingg.co.za', role: 'Manager' },
-                        { email: 'sipho@kingg.co.za', role: 'Cashier' },
-                      ].map(a => (
-                        <button
-                          key={a.email}
-                          type="button"
-                          onClick={() => {
-                            setEmail(a.email);
-                            setPassword('demo');
-                          }}
-                          className="px-4 py-3 rounded-xl bg-secondary/35 border border-border/60 hover:bg-sidebar-accent/50 hover:border-primary/30 hover:shadow-[0_0_0_1px_hsl(32_45%_58%/0.14)] transition-all text-left transform-gpu hover:-translate-y-[1px] active:translate-y-0"
-                        >
-                          <div className="text-sm font-semibold text-primary">{a.role}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">{a.email}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
 
               <p className="mt-6 text-xs text-muted-foreground">
                 Secure role-based access for King G operations.

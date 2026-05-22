@@ -22,14 +22,8 @@ interface ReconciliationRecord {
   notes: string;
 }
 
-const mockHistory: ReconciliationRecord[] = [
-  { id: '1', date: '2026-02-26', expected: 5200, actual: 5180, variance: -20, notes: 'Short R20' },
-  { id: '2', date: '2026-02-25', expected: 4800, actual: 4800, variance: 0, notes: '' },
-  { id: '3', date: '2026-02-24', expected: 6100, actual: 6120, variance: 20, notes: 'Over R20' },
-];
-
 export default function CashReconciliationPage() {
-  const [records, setRecords] = useState<ReconciliationRecord[]>(mockHistory);
+  const [records, setRecords] = useState<ReconciliationRecord[]>([]);
   const [open, setOpen] = useState(false);
   const [expected, setExpected] = useState('');
   const [actual, setActual] = useState('');

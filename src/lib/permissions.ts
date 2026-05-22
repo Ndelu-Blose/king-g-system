@@ -4,7 +4,7 @@
  * UI: use canDo/canApprove/canSee to show vs hide vs disable actions.
  */
 
-import type { UserRole } from '@/lib/mock-data';
+import type { UserRole } from '@/lib/types';
 
 // --- Permission constants (named strings for routes and API) ---
 export const PERMISSIONS = {

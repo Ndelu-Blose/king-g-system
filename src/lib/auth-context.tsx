@@ -1,119 +1,56 @@
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
-import { User, mockUsers } from './mock-data';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import type { User } from './types';
+import { clearStoredToken, fetchCurrentUser, loginWithApi, storeToken } from './auth-api';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:3001';
-const TOKEN_KEY = 'kingg_token';
-const USER_KEY = 'kingg_user';
+type LoginOutcome = { user: User } | { error: string };
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<User | null>;
+  login: (email: string, password: string) => Promise<LoginOutcome>;
   logout: () => void;
   isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function parseJwtExpMs(token: string): number | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    const exp = Number(payload?.exp);
-    if (!Number.isFinite(exp)) return null;
-    return exp * 1000;
-  } catch {
-    return null;
-  }
-}
-
-function persistSession(token: string, user: User): void {
-  localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-}
-
-function clearSession(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
-}
-
-function restoreSessionUser(): User | null {
-  const token = localStorage.getItem(TOKEN_KEY);
-  const rawUser = localStorage.getItem(USER_KEY);
-  if (!token || !rawUser) return null;
-
-  const expMs = parseJwtExpMs(token);
-  if (expMs && Date.now() >= expMs) {
-    clearSession();
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(rawUser) as User;
-    if (!parsed?.id || !parsed?.email || !parsed?.role) {
-      clearSession();
-      return null;
-    }
-    return parsed;
-  } catch {
-    clearSession();
-    return null;
-  }
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return restoreSessionUser();
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-    // Keep local copy fresh when user changes (same token key retained).
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-  }, [user]);
+    let cancelled = false;
+    fetchCurrentUser().then((restored) => {
+      if (!cancelled && restored) setUser(restored);
+      if (!cancelled) setBootstrapping(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const login = async (email: string, password: string) => {
-    const normalizedEmail = email.trim();
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail, password }),
-      });
-      if (!res.ok) return null;
-      const data = (await res.json()) as {
-        token?: string;
-        user?: { id: string; name: string; email: string; role: User['role'] };
-      };
-      if (!data?.token || !data?.user) return null;
-      const nextUser: User = {
-        id: data.user.id,
-        name: data.user.name,
-        email: data.user.email,
-        role: data.user.role,
-      };
-      persistSession(data.token, nextUser);
-      setUser(nextUser);
-      return nextUser;
-    } catch {
-      // Dev fallback if API is unavailable.
-      const found = mockUsers.find((u) => u.email === normalizedEmail);
-      if (!found) return null;
-      setUser(found);
-      return found;
-    }
+  const login = async (email: string, password: string): Promise<LoginOutcome> => {
+    const result = await loginWithApi(email, password);
+    if (!result.ok) return { error: result.error };
+    storeToken(result.token);
+    setUser(result.user);
+    return { user: result.user };
   };
 
   const logout = () => {
-    clearSession();
+    clearStoredToken();
     setUser(null);
   };
 
-  const isAuthenticated = useMemo(() => !!user, [user]);
+  if (bootstrapping) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

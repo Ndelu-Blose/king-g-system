@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { mockProducts } from '@/lib/mock-data';
 import { useInventory } from '@/contexts/InventoryContext';
 
 export type POLineItem = {
@@ -26,48 +25,6 @@ export type PurchaseOrder = {
   varianceApprovalStatus?: 'pending' | 'approved' | 'rejected';
 };
 
-const initialOrders: PurchaseOrder[] = [
-  {
-    id: 'PO-001',
-    supplierName: 'SA Breweries',
-    supplierId: 's1',
-    status: 'sent',
-    total: 2450,
-    createdAt: '2026-02-18T09:00:00',
-    sentAt: '2026-02-18T09:30:00',
-    items: [
-      { productId: '9', productName: 'Castle Lager 340ml', orderedQty: 50, expectedUnitCost: 12 },
-      { productId: '10', productName: 'Heineken 330ml', orderedQty: 24, expectedUnitCost: 15 },
-    ],
-  },
-  {
-    id: 'PO-002',
-    supplierName: 'Pernod Ricard SA',
-    supplierId: 's3',
-    status: 'received',
-    total: 3200,
-    createdAt: '2026-02-17T14:00:00',
-    sentAt: '2026-02-17T15:00:00',
-    receivedAt: '2026-02-19T10:00:00',
-    items: [
-      { productId: '11', productName: 'Jack Daniels', orderedQty: 12, deliveredQty: 12, expectedUnitCost: 26 },
-      { productId: '4', productName: 'Grey Goose Vodka', orderedQty: 12, deliveredQty: 12, expectedUnitCost: 22 },
-    ],
-    hasVariance: false,
-  },
-  {
-    id: 'PO-003',
-    supplierName: 'Distell Group',
-    supplierId: 's2',
-    status: 'draft',
-    total: 432,
-    createdAt: '2026-02-20T08:30:00',
-    items: [
-      { productId: '12', productName: 'Amarula Cream', orderedQty: 24, expectedUnitCost: 18 },
-    ],
-  },
-];
-
 type PurchaseOrderContextValue = {
   orders: PurchaseOrder[];
   addOrder: (supplierId: string, supplierName: string) => PurchaseOrder;
@@ -83,7 +40,7 @@ const PurchaseOrderContext = createContext<PurchaseOrderContextValue | null>(nul
 
 export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
   const { addWarehouseStock } = useInventory();
-  const [orders, setOrders] = useState<PurchaseOrder[]>(initialOrders);
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
 
   const addOrder = useCallback((supplierId: string, supplierName: string) => {
     const id = `PO-${String(orders.length + 1).padStart(3, '0')}`;
@@ -207,4 +164,3 @@ export function usePurchaseOrders() {
   return ctx;
 }
 
-export { mockProducts as poProductList };

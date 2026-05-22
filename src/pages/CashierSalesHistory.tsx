@@ -2,9 +2,8 @@ import { useSearchParams, Navigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { useShift, type ActivityEntry } from '@/contexts/ShiftContext';
-import { mockTransactions } from '@/lib/mock-data';
 import { getTransactionsFromApi } from '@/lib/pos-api';
-import type { Transaction } from '@/lib/mock-data';
+import type { Transaction } from '@/lib/types';
 import {
   CreditCard,
   Banknote,
@@ -62,11 +61,9 @@ export default function CashierSalesHistory() {
     enabled: !!user?.id,
   });
 
-  const mockForUser = mockTransactions.filter((t) => t.cashierId === user?.id);
-  // Always include session sales so transactions you just made show up even if API is empty or slow
   const fromApi = Array.isArray(apiTransactions) ? apiTransactions : [];
   const byId = new Map<string, Transaction>();
-  for (const t of [...sessionSales, ...fromApi, ...mockForUser]) {
+  for (const t of [...sessionSales, ...fromApi]) {
     if (!byId.has(t.id)) byId.set(t.id, t);
   }
   let merged = Array.from(byId.values()).sort(

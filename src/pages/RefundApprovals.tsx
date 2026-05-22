@@ -16,11 +16,14 @@ import { BackButton } from '@/components/BackButton';
 
 const REFUND_THRESHOLD = 500;
 
-const mockPendingRefunds = [
-  { id: 'REF-001', txnId: 'TXN-101', amount: 350, reason: 'Customer return - wrong item', requestedBy: 'Sipho N.', requestedAt: '2026-02-20 10:30' },
-  { id: 'REF-002', txnId: 'TXN-098', amount: 620, reason: 'Duplicate charge', requestedBy: 'Sipho N.', requestedAt: '2026-02-20 09:15' },
-  { id: 'REF-003', txnId: 'TXN-095', amount: 180, reason: 'Defective product', requestedBy: 'Lerato K.', requestedAt: '2026-02-19 16:45' },
-];
+type PendingRefund = {
+  id: string;
+  txnId: string;
+  amount: number;
+  reason: string;
+  requestedBy: string;
+  requestedAt: string;
+};
 
 interface RefundApprovalsProps {
   hideTitle?: boolean;
@@ -28,14 +31,14 @@ interface RefundApprovalsProps {
 
 export default function RefundApprovals({ hideTitle }: RefundApprovalsProps) {
   const { user } = useAuth();
-  const [pending, setPending] = useState(mockPendingRefunds);
-  const [approveDialog, setApproveDialog] = useState<{ open: boolean; refund: (typeof mockPendingRefunds)[0] | null; pin: string }>({
+  const [pending, setPending] = useState<PendingRefund[]>([]);
+  const [approveDialog, setApproveDialog] = useState<{ open: boolean; refund: PendingRefund | null; pin: string }>({
     open: false,
     refund: null,
     pin: '',
   });
 
-  const handleRequestApprove = (refund: (typeof mockPendingRefunds)[0]) => {
+  const handleRequestApprove = (refund: PendingRefund) => {
     setApproveDialog({ open: true, refund, pin: '' });
   };
 

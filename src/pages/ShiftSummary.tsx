@@ -1,5 +1,5 @@
 import { ClipboardList, Clock, DollarSign, User } from 'lucide-react';
-import { dailyStats } from '@/lib/mock-data';
+import { emptyDailyStats } from '@/lib/types';
 import { BackButton } from '@/components/BackButton';
 
 export default function ShiftSummary() {
@@ -20,7 +20,7 @@ export default function ShiftSummary() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Shift Sales</p>
-            <p className="text-xl font-bold text-foreground mt-1">R{dailyStats.totalSales.toLocaleString()}</p>
+            <p className="text-xl font-bold text-foreground mt-1">R{emptyDailyStats.totalSales.toLocaleString()}</p>
           </div>
         </div>
         <div className="glass-card card-hover p-5 flex items-start gap-4">
@@ -29,7 +29,7 @@ export default function ShiftSummary() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Transactions</p>
-            <p className="text-xl font-bold text-foreground mt-1">{dailyStats.transactionCount}</p>
+            <p className="text-xl font-bold text-foreground mt-1">{emptyDailyStats.transactionCount}</p>
           </div>
         </div>
         <div className="glass-card card-hover p-5 flex items-start gap-4">
@@ -38,7 +38,7 @@ export default function ShiftSummary() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Avg. Transaction</p>
-            <p className="text-xl font-bold text-foreground mt-1">R{dailyStats.avgTransaction.toFixed(0)}</p>
+            <p className="text-xl font-bold text-foreground mt-1">R{emptyDailyStats.avgTransaction.toFixed(0)}</p>
           </div>
         </div>
         <div className="glass-card card-hover p-5 flex items-start gap-4">

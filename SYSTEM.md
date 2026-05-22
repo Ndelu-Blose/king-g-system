@@ -9,11 +9,11 @@
 | Role            | Who uses it   | Purpose |
 |-----------------|---------------|---------|
 | **Owner**       | Business owner| Full control: sales, inventory, suppliers, cash, reports, audit, users, settings. |
-| **Senior Manager** | Thabo M.   | Day-to-day ops: approvals, receive stock, adjustments, discrepancies, promotions, reports, incident log. Controls inventory + floor risk. |
-| **Manager**     | Lerato K.     | Same sidebar as Senior Manager (approvals, stock, discrepancies, reports, promotions, incident log). |
-| **Cashier**     | Sipho N.      | POS only: scan, sell, take payment, print receipt, open/close shift, sales history, call for help. |
+| **Senior Manager** | Senior manager staff | Day-to-day ops: approvals, receive stock, adjustments, discrepancies, promotions, reports, incident log. Controls inventory + floor risk. |
+| **Manager**     | Manager staff | Same sidebar as Senior Manager (approvals, stock, discrepancies, reports, promotions, incident log). |
+| **Cashier**     | Cashier staff | POS only: scan, sell, take payment, print receipt, open/close shift, sales history, call for help. |
 
-**Where it’s defined:** `src/lib/mock-data.ts` (`UserRole`, `mockUsers`), `src/lib/auth-context.tsx` (login sets `user.role`).
+**Where it’s defined:** `src/lib/types.ts` (`UserRole`), `src/lib/auth-context.tsx` (login via `/api/auth/login`).
 
 **Who can go where:** `src/components/AppLayout.tsx` (redirects by role), `src/lib/cashier-rules.ts` (cashier allowed paths).
 
@@ -100,7 +100,7 @@
 
 | What | Where |
 |------|--------|
-| **Auth & role** | `src/lib/auth-context.tsx`, `src/lib/mock-data.ts` (users, roles) |
+| **Auth & role** | `src/lib/auth-context.tsx`, `src/lib/types.ts` (roles) |
 | **Who can open which route** | `src/components/AppLayout.tsx`, `src/lib/cashier-rules.ts` |
 | **Sidebar (what each role sees)** | `src/components/AppSidebar.tsx` |
 | **All routes** | `src/App.tsx` (Routes) |

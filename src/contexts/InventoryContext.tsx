@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import { mockInventory as initialInventory } from '@/lib/mock-data';
-import type { InventoryBalance } from '@/lib/mock-data';
+import type { InventoryBalance } from '@/lib/types';
 
 export type StockLocation = 'lounge' | 'warehouse';
 
@@ -18,9 +17,7 @@ type InventoryContextValue = {
 const InventoryContext = createContext<InventoryContextValue | null>(null);
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
-  const [inventory, setInventory] = useState<InventoryBalance[]>(() =>
-    initialInventory.map((i) => ({ ...i }))
-  );
+  const [inventory, setInventory] = useState<InventoryBalance[]>([]);
 
   const addWarehouseStock = useCallback((productId: string, qty: number) => {
     setInventory((prev) =>
@@ -115,7 +112,7 @@ export function useInventory() {
   const ctx = useContext(InventoryContext);
   if (!ctx) {
     return {
-      inventory: initialInventory,
+      inventory: [] as InventoryBalance[],
       addWarehouseStock: () => {},
       receiveStock: () => {},
       transferStock: () => {},

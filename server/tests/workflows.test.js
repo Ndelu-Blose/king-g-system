@@ -1,14 +1,19 @@
 import request from "supertest";
 import app from "../src/app.js";
 import { getSupabaseAdmin } from "../src/lib/supabase.js";
+import { hashPassword } from "../src/lib/passwords.js";
 import { isRealSupabaseConfigured } from "./test-utils.js";
 
-const OWNER_EMAIL = "owner@kingg.co.za";
-const CASHIER_EMAIL = "sipho@kingg.co.za";
+const OWNER_EMAIL = (process.env.TEST_OWNER_EMAIL || "test-owner@example.com").toLowerCase();
+const CASHIER_EMAIL = (process.env.TEST_CASHIER_EMAIL || "test-cashier@example.com").toLowerCase();
+const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD || "test-password-dev";
+const TEST_PASSWORD_HASH = hashPassword(TEST_USER_PASSWORD);
 const supabaseConfigured = isRealSupabaseConfigured();
 
 async function login(email) {
-  const res = await request(app).post("/api/auth/login").send({ email, password: "dev" });
+  const res = await request(app)
+    .post("/api/auth/login")
+    .send({ email, password: TEST_USER_PASSWORD });
   expect(res.statusCode).toBe(200);
   expect(res.body?.token).toBeTruthy();
   return res.body.token;
@@ -16,7 +21,7 @@ async function login(email) {
 
 function buildSalePayload() {
   return {
-    items: [{ productId: "1", name: "Johnnie Walker Black", qty: 1, unitPrice: 45, lineTotal: 45 }],
+    items: [{ productId: "1", name: "Test Product", qty: 1, unitPrice: 45, lineTotal: 45 }],
     subtotal: 45,
     vat: 0,
     total: 45,
@@ -36,8 +41,20 @@ function buildSalePayload() {
       .from("users")
       .upsert(
         [
-          { id: "1", name: "King G", email: OWNER_EMAIL, role: "owner", password_hash: null },
-          { id: "4", name: "Sipho N.", email: CASHIER_EMAIL, role: "cashier", password_hash: null },
+          {
+            id: "test-owner",
+            name: "Test Owner",
+            email: OWNER_EMAIL,
+            role: "owner",
+            password_hash: TEST_PASSWORD_HASH,
+          },
+          {
+            id: "test-cashier",
+            name: "Test Cashier",
+            email: CASHIER_EMAIL,
+            role: "cashier",
+            password_hash: TEST_PASSWORD_HASH,
+          },
         ],
         { onConflict: "id" }
       );
@@ -48,7 +65,7 @@ function buildSalePayload() {
         [
           {
             id: "1",
-            name: "Johnnie Walker Black",
+            name: "Test Product",
             barcode: "5000267024202",
             category: "Whisky",
             base_price: 45,

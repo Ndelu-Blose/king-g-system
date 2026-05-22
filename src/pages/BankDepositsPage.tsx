@@ -11,14 +11,8 @@ interface Deposit {
   reference?: string;
 }
 
-const mockDeposits: Deposit[] = [
-  { id: '1', date: '2026-02-26', amount: 5200, status: 'pending' },
-  { id: '2', date: '2026-02-25', amount: 4800, status: 'completed', reference: 'DEP-2026-025' },
-  { id: '3', date: '2026-02-24', amount: 6100, status: 'completed', reference: 'DEP-2026-024' },
-];
-
 export default function BankDepositsPage() {
-  const [deposits, setDeposits] = useState<Deposit[]>(mockDeposits);
+  const [deposits, setDeposits] = useState<Deposit[]>([]);
 
   const markCompleted = (id: string) => {
     setDeposits((prev) =>
