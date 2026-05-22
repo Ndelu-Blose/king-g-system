@@ -1,38 +1,76 @@
-# King G POS – Node backend
+# King G API
 
-Express API for products, sales, and audit. Data is stored in JSON files under `data/`.
+Express REST API for the King G frontend. All persistent data goes through **Supabase** (no local JSON/SQLite store).
 
-## Run
-
-From project root:
+## Run locally
 
 ```bash
-npm run server
-```
-
-Or from this folder:
-
-```bash
+cd server
+npm install
 npm start
 ```
 
-Server listens on **http://localhost:3001**. The Vite dev server proxies `/api` to this port.
+Requires root `.env` (or `server/.env`) with:
 
-## Endpoints
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `JWT_SECRET`
 
-- `GET /api/health` – health check
-- `GET /api/products` – all products with stock
-- `GET /api/products/barcode/:barcode` – product by barcode (404 if not found)
-- `GET /api/products/search?q=&limit=20` – search by name/barcode/category
-- `GET /api/categories` – list of categories
-- `POST /api/sales` – create sale (body: `{ cashierId, items, total, payments }`)
-- `POST /api/audit` – append audit entry
+Default URL: http://localhost:3001
 
-## Data files
+## Tests
 
-- `data/products.json` – product catalog
-- `data/inventory.json` – stock per productId
-- `data/sales.json` – completed sales (appended)
-- `data/audit.json` – audit log (appended)
+```bash
+npm run test:unit          # fast tests (no live Supabase)
+npm run test:integration   # workflows (needs Supabase env)
+```
 
-Edit `products.json` and `inventory.json` to change catalog and stock. Sales and audit are written by the API.
+## Vercel
+
+This folder is the **Root Directory** for the `king-g-api` Vercel project.
+
+- `npm run build` → `scripts/vercel-build.mjs` prepares `dist/` for the Express preset
+- `vercel.json` sets `outputDirectory: dist`
+- Do not add a `server/api/` folder; Vercel reserves `/api/*` for separate functions and breaks Express routes
+
+## Layout
+
+```
+server/
+├── src/
+│   ├── app.js              # Express app and routes
+│   ├── index.js            # Local dev server (listen on PORT)
+│   ├── lib/                # Supabase client, passwords, auth helpers
+│   └── services/           # pos, receiving, users, reports
+├── auth.js                 # JWT login + middleware
+├── permissions.js          # RBAC helpers
+├── tests/
+└── scripts/
+    ├── vercel-build.mjs    # Vercel production build
+    └── set-user-password.js
+```
+
+## Main endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health`, `/api/health` | No | Health check |
+| POST | `/api/auth/login` | No | Email/password → JWT |
+| GET | `/api/auth/me` | Bearer | Current user |
+| GET | `/api/products` | No* | Product catalog |
+| POST | `/api/sales` | Bearer | Create sale |
+| … | receiving, users, audit | Varies | See `src/app.js` |
+
+\*Some routes are public for POS reads; writes require JWT and permissions.
+
+## Set a user password (local)
+
+```bash
+cd server
+# Windows
+set OWNER_EMAIL=owner@kingg.co.za
+set OWNER_PASSWORD=your-secure-password
+node scripts/set-user-password.js
+```
+
+Use User Management in the app when an owner is already signed in.

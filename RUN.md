@@ -1,5 +1,7 @@
 # Running King G
 
+For production URLs and Vercel setup, see [README.md](./README.md) and [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md).
+
 ## Start the app (with real database for real-time data)
 
 1. **Start the API server** (Supabase-backed REST API on port 3001):
