@@ -4,19 +4,79 @@
 import { type Transaction } from './types';
 import type { Product, SalePayload, AuditEntry, ProductWithStock } from '@/types/pos';
 import { isSupabaseConfigured, supabase } from './supabase';
-import type {
-  DeliveryIntakeHeader,
-  DeliveryIntakeLine,
-  ReceiveIntoLocation,
-  ReceivingStatus,
-  BlindTransferCopyHeader,
-  BlindTransferCopyLine,
-} from '@/types/receiving';
+
+export type ReceiveIntoLocation = 'warehouse' | 'lounge' | string;
+export type ReceivingStatus =
+  | 'draft'
+  | 'expected_captured'
+  | 'physical_verified'
+  | 'variance_review'
+  | 'confirmed'
+  | string;
+
+export interface DeliveryIntakeHeader {
+  id: string;
+  intakeNumber: string;
+  supplier: string;
+  invoiceNumber: string;
+  deliveryReference: string;
+  deliveryDate: string;
+  branchSite: string;
+  receiveIntoLocation: ReceiveIntoLocation;
+  receivedBy: string;
+  notes?: string | null;
+  status: ReceivingStatus;
+  confirmedAt?: string | null;
+}
+
+export interface DeliveryIntakeLine {
+  id: string;
+  intakeId: string;
+  productId: string;
+  expectedQty: number;
+  actualQty: number;
+  acceptedQty: number;
+  rejectedQty: number;
+  heldQty: number;
+  unitOfMeasure: string;
+  unitCost?: number | null;
+  batchNumber?: string | null;
+  expiryDate?: string | null;
+  discrepancyReason?: string | null;
+  decision?: 'accept' | 'reject' | 'hold' | string;
+  verificationNotes?: string | null;
+  destination?: string | null;
+}
+
+export interface BlindTransferCopyHeader {
+  id: string;
+  blindCopyNumber: string;
+  intakeId: string;
+  fromLocation: string;
+  toLocation: string;
+  createdBy?: string | null;
+  issuedBy?: string | null;
+  receivedBy?: string | null;
+  issuedAt?: string | null;
+  receivedAt?: string | null;
+  status: string;
+}
+
+export interface BlindTransferCopyLine {
+  productId: string;
+  qty: number;
+  unitOfMeasure: string;
+  batchNumber?: string | null;
+  expiryDate?: string | null;
+  destinationBin?: string | null;
+}
 
 import { getApiBase } from './api-base';
 
 const API_BASE = getApiBase();
 const TOKEN_KEY = 'kingg_token';
+// Default to backend API mode. Direct Supabase access is opt-in only.
+const USE_DIRECT_SUPABASE = isSupabaseConfigured && import.meta.env.VITE_USE_DIRECT_SUPABASE === 'true';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -68,7 +128,7 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
 export async function getProductByBarcode(barcode: string): Promise<ProductWithStock | null> {
   const trimmed = barcode.trim();
   if (!trimmed) return null;
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const { data, error } = await supabase
       .from('products')
       .select('id,name,barcode,category,base_price,cost_price,image,inventory(total_qty)')
@@ -97,7 +157,7 @@ export async function getProductByBarcode(barcode: string): Promise<ProductWithS
 
 /** Search products from backend or Supabase. */
 export async function searchProducts(query: string, limit = 20): Promise<Product[]> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const q = query.trim();
     let req = supabase
       .from('products')
@@ -126,7 +186,7 @@ export async function searchProducts(query: string, limit = 20): Promise<Product
 
 /** Get all products from backend or Supabase. */
 export async function getAllProducts(): Promise<ProductWithStock[]> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const { data: products, error: pErr } = await supabase
       .from('products')
       .select('id,name,barcode,category,base_price,cost_price,image');
@@ -156,7 +216,7 @@ export async function getAllProducts(): Promise<ProductWithStock[]> {
 
 /** Get categories from backend or Supabase. */
 export async function getCategories(): Promise<string[]> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const { data, error } = await supabase.from('products').select('category');
     if (error) throw new Error(error.message);
     const cats = Array.from(new Set((data ?? []).map((d) => d.category).filter(Boolean)));
@@ -174,62 +234,73 @@ export async function createSale(payload: SalePayload): Promise<{ id: string; cr
   return apiPost<{ id: string; createdAt: string }>('/api/sales', payload);
 }
 
+type AuditWriteEntry = Omit<AuditEntry, 'id' | 'timestamp'> & {
+  entityType?: string;
+  entityId?: string;
+  reasonCode?: string | null;
+};
+
 /** Write audit log; tries backend, then in-memory. */
-export async function writeAuditLog(entry: Omit<AuditEntry, 'id' | 'timestamp'>): Promise<void> {
+export async function writeAuditLog(entry: AuditWriteEntry): Promise<void> {
   await apiPost('/api/audit', { ...entry, timestamp: new Date().toISOString() });
 }
 
 /** Void a sale and restore stock quantities. Requires void.approve permission. */
 export async function voidSaleApi(saleId: string, reasonCode?: string): Promise<{ ok: true }> {
-  if (!isSupabaseConfigured) {
-    throw new Error('Supabase is not configured for voiding sales');
+  if (USE_DIRECT_SUPABASE) {
+    const { data: sale, error: saleError } = await supabase.from('sales').select('*').eq('id', saleId).single();
+    if (saleError) throw new Error(saleError.message);
+    if (!sale) throw new Error('Sale not found');
+    if (sale.status === 'void') throw new Error('Sale is already voided');
+
+    const { data: items, error: itemsError } = await supabase.from('sale_items').select('*').eq('sale_id', saleId);
+    if (itemsError) throw new Error(itemsError.message);
+
+    for (const item of items ?? []) {
+      const restoreQty = Math.max(0, Number(item.qty) || 0);
+      if (restoreQty === 0) continue;
+
+      const { data: inv, error: invError } = await supabase
+        .from('inventory')
+        .select('total_qty')
+        .eq('product_id', item.product_id)
+        .single();
+      if (invError) throw new Error(invError.message);
+      if (!inv) throw new Error(`Inventory row not found for product ${item.product_id}`);
+
+      const { error: invUpdateError } = await supabase
+        .from('inventory')
+        .update({ total_qty: (inv.total_qty ?? 0) + restoreQty })
+        .eq('product_id', item.product_id);
+      if (invUpdateError) throw new Error(invUpdateError.message);
+    }
+
+    const { error: statusError } = await supabase.from('sales').update({ status: 'void' }).eq('id', saleId);
+    if (statusError) throw new Error(statusError.message);
+
+    await writeAuditLog({
+      action: 'void.completed',
+      actorId: String(sale.cashier_id),
+      actorRole: null,
+      entityType: 'sale',
+      entityId: saleId,
+      before: { status: sale.status, total: sale.total },
+      after: { status: 'void' },
+      reasonCode: reasonCode || null,
+    });
+
+    return { ok: true };
   }
 
-  const { data: sale, error: saleError } = await supabase.from('sales').select('*').eq('id', saleId).single();
-  if (saleError) throw new Error(saleError.message);
-  if (!sale) throw new Error('Sale not found');
-  if (sale.status === 'void') throw new Error('Sale is already voided');
-
-  const { data: items, error: itemsError } = await supabase.from('sale_items').select('*').eq('sale_id', saleId);
-  if (itemsError) throw new Error(itemsError.message);
-
-  for (const item of items ?? []) {
-    const restoreQty = Math.max(0, Number(item.qty) || 0);
-    if (restoreQty === 0) continue;
-
-    const { data: inv, error: invError } = await supabase
-      .from('inventory')
-      .select('total_qty')
-      .eq('product_id', item.product_id)
-      .single();
-    if (invError) throw new Error(invError.message);
-    if (!inv) throw new Error(`Inventory row not found for product ${item.product_id}`);
-
-    const { error: invUpdateError } = await supabase
-      .from('inventory')
-      .update({ total_qty: (inv.total_qty ?? 0) + restoreQty })
-      .eq('product_id', item.product_id);
-    if (invUpdateError) throw new Error(invUpdateError.message);
-
-    // TODO: restore location-level stock (lounge_qty / warehouse_qty) once sale_items captures source location.
-  }
-
-  const { error: statusError } = await supabase.from('sales').update({ status: 'void' }).eq('id', saleId);
-  if (statusError) throw new Error(statusError.message);
-
-  await writeAuditLog({
-    action: 'void.completed',
-    actorId: String(sale.cashier_id),
-    actorRole: null,
-    approverId: 'supabase',
-    approverRole: null,
-    entityType: 'sale',
-    entityId: saleId,
-    before: { status: sale.status, total: sale.total },
-    after: { status: 'void' },
-    reasonCode: reasonCode || null,
+  const res = await fetch(`${API_BASE}/api/sales/${encodeURIComponent(saleId)}/void`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ reasonCode: reasonCode || 'void_approved' }),
   });
-
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `Void failed (${res.status})`);
+  }
   return { ok: true };
 }
 
@@ -238,7 +309,7 @@ export async function refundSaleApi(
   saleId: string,
   opts?: { amount?: number; reasonCode?: string }
 ): Promise<{ ok: boolean; error?: string }> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     try {
       const { data: sale, error } = await supabase.from('sales').select('*').eq('id', saleId).single();
       if (error || !sale) return { ok: false, error: error?.message || 'Sale not found' };
@@ -248,8 +319,6 @@ export async function refundSaleApi(
         action: 'refund.completed',
         actorId: String(sale.cashier_id),
         actorRole: null,
-        approverId: 'supabase',
-        approverRole: null,
         entityType: 'sale',
         entityId: saleId,
         before: { status: 'completed', total: sale.total },
@@ -284,29 +353,49 @@ export async function refundSaleApi(
 export async function receiveStockApi(
   payload: { productId: string; qty: number; location: 'lounge' | 'warehouse'; invoiceNumber?: string }
 ): Promise<{ ok: true; result: { total_qty: number; lounge_qty: number; warehouse_qty: number } }> {
-  if (!isSupabaseConfigured) {
-    throw new Error('Supabase is not configured for inventory receiving');
+  if (USE_DIRECT_SUPABASE) {
+    const { data: inv, error } = await supabase
+      .from('inventory')
+      .select('total_qty,lounge_qty,warehouse_qty')
+      .eq('product_id', payload.productId)
+      .single();
+    if (error) throw new Error(error.message);
+    if (!inv) throw new Error(`Inventory row not found for product ${payload.productId}`);
+
+    const qty = Math.max(0, Number(payload.qty) || 0);
+    const next = {
+      total_qty: (inv.total_qty ?? 0) + qty,
+      lounge_qty: (inv.lounge_qty ?? 0) + (payload.location === 'lounge' ? qty : 0),
+      warehouse_qty: (inv.warehouse_qty ?? 0) + (payload.location === 'warehouse' ? qty : 0),
+    };
+
+    const { error: updErr } = await supabase.from('inventory').update(next).eq('product_id', payload.productId);
+    if (updErr) throw new Error(updErr.message);
+
+    return { ok: true, result: next };
   }
 
-  const { data: inv, error } = await supabase
-    .from('inventory')
-    .select('total_qty,lounge_qty,warehouse_qty')
-    .eq('product_id', payload.productId)
-    .single();
-  if (error) throw new Error(error.message);
-  if (!inv) throw new Error(`Inventory row not found for product ${payload.productId}`);
-
-  const qty = Math.max(0, Number(payload.qty) || 0);
-  const next = {
-    total_qty: (inv.total_qty ?? 0) + qty,
-    lounge_qty: (inv.lounge_qty ?? 0) + (payload.location === 'lounge' ? qty : 0),
-    warehouse_qty: (inv.warehouse_qty ?? 0) + (payload.location === 'warehouse' ? qty : 0),
+  const res = await fetch(`${API_BASE}/api/inventory/receive`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `Receive failed (${res.status})`);
+  }
+  const body = (await res.json()) as {
+    ok: boolean;
+    after?: { total?: number; lounge?: number; warehouse?: number };
   };
-
-  const { error: updErr } = await supabase.from('inventory').update(next).eq('product_id', payload.productId);
-  if (updErr) throw new Error(updErr.message);
-
-  return { ok: true, result: next };
+  return {
+    ok: true,
+    result: {
+      total_qty: Number(body.after?.total ?? 0),
+      lounge_qty: Number(body.after?.lounge ?? 0),
+      warehouse_qty: Number(body.after?.warehouse ?? 0),
+    },
+  };
 }
 
 export interface DeliveryIntakeApiPayload {
@@ -349,7 +438,7 @@ export interface BlindCopyApiResponse {
 }
 
 export async function saveIntakeDraftApi(payload: DeliveryIntakeApiPayload): Promise<DeliveryIntakeApiResponse> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const row = {
       id: payload.id,
       intake_number: payload.intakeNumber,
@@ -412,7 +501,7 @@ export async function saveIntakeDraftApi(payload: DeliveryIntakeApiPayload): Pro
 }
 
 export async function saveExpectedLinesApi(intakeId: string, lines: DeliveryLineApiPayload[]): Promise<DeliveryIntakeApiResponse> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const { error: delErr } = await supabase.from('delivery_intake_lines').delete().eq('intake_id', intakeId);
     if (delErr) throw new Error(delErr.message);
     const rows = lines.map((line) => ({
@@ -491,7 +580,7 @@ export async function saveVerificationApi(
   lines: DeliveryLineApiPayload[],
   status: ReceivingStatus
 ): Promise<DeliveryIntakeApiResponse> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     for (const line of lines) {
       const acceptedQty = line.decision === 'accept' ? Math.max(0, Number(line.actualQty) || 0) : 0;
       const rejectedQty = line.decision === 'reject' ? Math.max(0, Number(line.actualQty) || 0) : 0;
@@ -568,7 +657,7 @@ export async function saveVerificationApi(
 }
 
 export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntakeApiResponse> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const { data: lines, error: lErr } = await supabase.from('delivery_intake_lines').select('*').eq('intake_id', intakeId);
     if (lErr) throw new Error(lErr.message);
     for (const line of lines ?? []) {
@@ -649,7 +738,7 @@ export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntake
 }
 
 export async function generateBlindCopyApi(intakeId: string): Promise<BlindCopyApiResponse> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const { data: intake, error: iErr } = await supabase.from('delivery_intakes').select('*').eq('id', intakeId).single();
     if (iErr) throw new Error(iErr.message);
     const { data: lines, error: lErr } = await supabase
@@ -715,7 +804,7 @@ export async function generateBlindCopyApi(intakeId: string): Promise<BlindCopyA
 }
 
 export async function issueBlindCopyApi(blindCopyId: string): Promise<BlindCopyApiResponse> {
-  if (isSupabaseConfigured) {
+  if (USE_DIRECT_SUPABASE) {
     const { data: header, error } = await supabase
       .from('blind_transfer_copies')
       .update({ status: 'issued', issued_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -769,8 +858,11 @@ export async function getBlindCopyByIdApi(blindCopyId: string): Promise<BlindCop
 
 /** Fetch all transactions from the database (real-time). Optional cashierId to filter. */
 export async function getTransactionsFromApi(cashierId?: string | null): Promise<Transaction[]> {
-  if (!isSupabaseConfigured) {
-    return [];
+  if (!USE_DIRECT_SUPABASE) {
+    const params = new URLSearchParams();
+    if (cashierId) params.set('cashierId', cashierId);
+    const qs = params.toString();
+    return apiGet<Transaction[]>(`/api/transactions${qs ? `?${qs}` : ''}`);
   }
 
   let salesReq = supabase.from('sales').select('*').order('created_at', { ascending: false });
@@ -863,8 +955,8 @@ export async function createHelpRequest(payload: HelpRequestPayload): Promise<{ 
     return saveHelpRequestLocal(payload);
   }
 
-  if (!isSupabaseConfigured) {
-    throw new Error('Supabase is not configured for help requests');
+  if (!USE_DIRECT_SUPABASE) {
+    return apiPost<{ id: string; createdAt: string }>('/api/help-requests', payload);
   }
 
   const id = `HR-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -903,8 +995,9 @@ export async function getHelpRequests(status?: string | null): Promise<HelpReque
     return status ? local.filter((r) => r.status === status) : local;
   }
 
-  if (!isSupabaseConfigured) {
-    throw new Error('Supabase is not configured for help requests');
+  if (!USE_DIRECT_SUPABASE) {
+    const query = status ? `?status=${encodeURIComponent(status)}` : '';
+    return apiGet<HelpRequest[]>(`/api/help-requests${query}`);
   }
 
   let req = supabase.from('help_requests').select('*').order('created_at', { ascending: false });
@@ -931,8 +1024,14 @@ export async function acknowledgeHelpRequest(id: string, acknowledgedBy: string)
     return true;
   }
 
-  if (!isSupabaseConfigured) {
-    throw new Error('Supabase is not configured for help requests');
+  if (!USE_DIRECT_SUPABASE) {
+    const res = await fetch(`${API_BASE}/api/help-requests/${encodeURIComponent(id)}/acknowledge`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ acknowledgedBy }),
+    });
+    if (!res.ok) throw new Error('Failed to acknowledge help request');
+    return true;
   }
 
   const { error } = await supabase

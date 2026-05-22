@@ -25,7 +25,8 @@ function verify(token) {
   if (sig !== expected) return null;
   try {
     const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    if (payload.exp && Math.floor(Date.now() / 1000) > payload.exp) return null;
+    // `exp` is stored as Unix timestamp seconds (see loginHandler). Compare in ms.
+    if (payload.exp && Date.now() > payload.exp * 1000) return null;
     return payload;
   } catch {
     return null;

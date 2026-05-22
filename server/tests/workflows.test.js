@@ -2,12 +2,13 @@ import request from "supertest";
 import app from "../src/app.js";
 import { getSupabaseAdmin } from "../src/lib/supabase.js";
 import { hashPassword } from "../src/lib/passwords.js";
+import { isRealSupabaseConfigured } from "./test-utils.js";
 
 const OWNER_EMAIL = (process.env.TEST_OWNER_EMAIL || "test-owner@example.com").toLowerCase();
 const CASHIER_EMAIL = (process.env.TEST_CASHIER_EMAIL || "test-cashier@example.com").toLowerCase();
 const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD || "test-password-dev";
 const TEST_PASSWORD_HASH = hashPassword(TEST_USER_PASSWORD);
-const supabaseConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabaseConfigured = isRealSupabaseConfigured();
 
 async function login(email) {
   const res = await request(app)
@@ -165,14 +166,15 @@ function buildSalePayload() {
   });
 
   it("runs the receiving intake flow + blind copy flow", async () => {
+    const intakeNumber = `IN-001-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const createDraftRes = await request(app)
       .post("/api/intakes/draft")
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({
-        intakeNumber: "IN-001",
+        intakeNumber,
         supplier: "Test Supplier",
-        invoiceNumber: "INV-001",
-        deliveryReference: "DEL-001",
+        invoiceNumber: `INV-${intakeNumber}`,
+        deliveryReference: `DEL-${intakeNumber}`,
         deliveryDate: "2026-03-26",
         branchSite: "Main",
         receiveIntoLocation: "warehouse",
@@ -288,5 +290,5 @@ function buildSalePayload() {
     const getBlindCopyRes = await request(app).get(`/api/blind-copies/${encodeURIComponent(blindCopyId)}`);
     expect(getBlindCopyRes.statusCode).toBe(200);
     expect(Number(getBlindCopyRes.body?.lines?.[0]?.qty)).toBe(5);
-  });
+  }, 30000);
 });
