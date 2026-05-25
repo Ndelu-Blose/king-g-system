@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
+import { requestPasswordReset } from '@/lib/auth-api';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -9,7 +11,9 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -17,6 +21,7 @@ export default function Login() {
     e.preventDefault();
     if (submitting) return;
     setError('');
+    setResetMessage('');
     setSubmitting(true);
     try {
       const outcome = await login(email, password);
@@ -156,6 +161,32 @@ export default function Login() {
                 </div>
 
                 {error && <p className="text-sm text-destructive">{error}</p>}
+                {resetMessage && <p className="text-sm text-muted-foreground">{resetMessage}</p>}
+
+                {isSupabaseConfigured && (
+                  <button
+                    type="button"
+                    disabled={resetting || !email.trim()}
+                    onClick={async () => {
+                      setError('');
+                      setResetMessage('');
+                      setResetting(true);
+                      try {
+                        const result = await requestPasswordReset(email);
+                        if (result.ok) {
+                          setResetMessage('If this email is registered, a reset link was sent. Check your inbox.');
+                        } else {
+                          setError(result.error);
+                        }
+                      } finally {
+                        setResetting(false);
+                      }
+                    }}
+                    className="text-sm text-[hsl(32_45%_58%)] hover:underline disabled:opacity-50"
+                  >
+                    {resetting ? 'Sending…' : 'Forgot password?'}
+                  </button>
+                )}
 
                 <button
                   type="submit"

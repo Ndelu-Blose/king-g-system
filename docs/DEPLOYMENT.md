@@ -8,7 +8,7 @@
 - [ ] Root Directory: **`server`**
 - [ ] Framework: **Express**
 - [ ] Output Directory: **`dist`**
-- [ ] Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JWT_SECRET`
+- [ ] Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `JWT_SECRET`
 - [ ] Deploy succeeds; `GET /api/health` returns `{"ok":true}`
 
 ### Checklist — `king-g-system`

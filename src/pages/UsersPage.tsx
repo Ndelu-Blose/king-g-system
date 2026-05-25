@@ -180,7 +180,9 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">User Management</h1>
-          <p className="text-sm text-muted-foreground">Manage system users and roles</p>
+          <p className="text-sm text-muted-foreground">
+            Add staff, set roles, and reset passwords. Sign-in uses Supabase Auth; roles stay here in King G.
+          </p>
         </div>
         <Button
           onClick={() => setAddOpen(true)}
@@ -318,7 +320,9 @@ export default function UsersPage() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add user</DialogTitle>
-            <DialogDescription>Create a new account with name, email, role, and password.</DialogDescription>
+            <DialogDescription>
+              Creates a Supabase login and a King G profile. Share the password securely, or use Forgot password on the login page later.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid gap-2">

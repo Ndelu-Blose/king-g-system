@@ -28,7 +28,7 @@ Repository: https://github.com/Ndelu-Blose/king-g-system
 | Frontend | Vite, React, TypeScript |
 | API | Express (Node 20) |
 | Database | Supabase (Postgres) |
-| Auth | JWT (API) + Supabase client (browser) |
+| Auth | Supabase Auth (passwords) + `public.users` roles + API JWT validation |
 | CI | GitHub Actions |
 | Hosting | Vercel (two projects: frontend + API) |
 
@@ -141,7 +141,7 @@ Do **not** put `SUPABASE_SERVICE_ROLE_KEY` or `JWT_SECRET` on the frontend proje
 | Symptom | Cause | Fix |
 |---------|--------|-----|
 | Login **405** | Browser posts to frontend URL `/api/...` (SPA) | Set `VITE_API_URL` and redeploy frontend |
-| Login **401** | Wrong email/password or missing `password_hash` | Fix user in Supabase / User Management |
+| Login **401** | Wrong password or profile not linked to Auth | See [docs/AUTH.md](./docs/AUTH.md) |
 | API build: no entrypoint in `dist` | Old deploy or missing build script | Deploy latest `main`; `server` runs `scripts/vercel-build.mjs` |
 | `/api/*` **404** on API host | Reserved `server/api/` folder conflict | Fixed on `main` — use Express in `dist/` only |
 

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { User } from './types';
-import { clearStoredToken, fetchCurrentUser, loginWithApi, storeToken } from './auth-api';
+import { fetchCurrentUser, loginWithApi, signOutAuth, storeToken } from './auth-api';
 
 type LoginOutcome = { user: User } | { error: string };
 
@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    clearStoredToken();
+    void signOutAuth();
     setUser(null);
   };
 

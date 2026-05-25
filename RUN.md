@@ -48,25 +48,26 @@ If you get **ERR_CONNECTION_TIMED_OUT** when opening `http://10.15.12.115:8080`:
 
 ## Login
 
-Sign in with an account in Supabase `public.users`. Every user must have a `password_hash` set (no passwordless logins).
+Production uses **Supabase Auth** for passwords and **`public.users`** for roles (owner, manager, cashier). See [docs/AUTH.md](./docs/AUTH.md).
 
 ### Owner / first user
 
-1. Add an owner row in `public.users` (Supabase Table Editor or SQL), **or** use **User Management** after an existing owner is signed in.
-2. Set the password via **User Management → Change password**, or locally:
+1. Create the person in **Supabase → Authentication → Users** (email + password), **or** use **Users & Roles** in the app after you are signed in as owner.
+2. Ensure a matching row exists in **`public.users`** with the correct **role**. If you created them only in Authentication, link the profile:
 
    ```bash
    cd server
-   set OWNER_EMAIL=you@example.com
-   set OWNER_PASSWORD=your-secure-password
-   node scripts/set-user-password.js
+   set USER_EMAIL=you@example.com
+   node scripts/link-auth-profile.js
    ```
 
-   (On macOS/Linux use `export OWNER_EMAIL=...` and `export OWNER_PASSWORD=...`.)
+3. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in `.env` (same project as the API). Restart `npm run dev` after changing env.
 
-### If a password was ever committed to git or shared
+Staff can use **Forgot password?** on the login page once Supabase email is configured.
 
-Rotate it immediately using User Management or `scripts/set-user-password.js`. Never put real passwords in `RUN.md`, `.env.example`, or other tracked files.
+### Legacy `password_hash` only accounts
+
+Until linked to Auth, set password with `scripts/set-user-password.js` (see [docs/AUTH.md](./docs/AUTH.md)).
 
 ---
 
