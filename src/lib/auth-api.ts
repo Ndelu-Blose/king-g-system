@@ -53,13 +53,29 @@ async function loginWithSupabase(email: string, password: string): Promise<Login
 
 export async function loginWithApi(email: string, password: string): Promise<LoginResult> {
   if (isSupabaseConfigured) {
+    const supabaseResult = await loginWithSupabase(email, password);
+    if (supabaseResult.ok) return supabaseResult;
+
+    // Fallback protects logins when frontend Supabase config is out of sync
+    // with the backend auth mode (common during env changes/migrations).
     try {
-      return await loginWithSupabase(email, password);
+      const apiResult = await loginWithApiFallback(email, password);
+      if (apiResult.ok) return apiResult;
+      const mergedMessage =
+        apiResult.error && apiResult.error !== supabaseResult.error
+          ? `${supabaseResult.error} ${apiResult.error}`
+          : supabaseResult.error;
+      return { ok: false, error: mergedMessage };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Supabase sign-in failed';
+      const msg = e instanceof Error ? e.message : supabaseResult.error;
       return { ok: false, error: msg };
     }
   }
+
+  return loginWithApiFallback(email, password);
+}
+
+async function loginWithApiFallback(email: string, password: string): Promise<LoginResult> {
 
   try {
     const res = await fetch(`${getApiBase()}/api/auth/login`, {
@@ -74,10 +90,11 @@ export async function loginWithApi(email: string, password: string): Promise<Log
       hint?: string;
     };
     if (!res.ok) {
+      const serverMessage = [data.error, data.hint].filter(Boolean).join(' ');
       return {
         ok: false,
         error:
-          data.error ||
+          serverMessage ||
           (res.status === 401 ? 'Invalid email or password.' : `Login failed (${res.status}).`),
       };
     }

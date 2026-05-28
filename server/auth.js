@@ -36,14 +36,27 @@ export async function loginHandler(req, res) {
   try {
     if (isSupabaseAuthEnabled()) {
       const supabaseResult = await signInWithSupabaseAuth(String(email).trim(), password);
-      if (supabaseResult) {
+      if (supabaseResult?.ok) {
         return res.json(supabaseResult);
+      }
+      if (supabaseResult && !supabaseResult.ok) {
+        const msg = String(supabaseResult.error || "");
+        if (/email not confirmed/i.test(msg)) {
+          return res.status(401).json({
+            error: "Please confirm your email before signing in.",
+            hint: "Ask an owner to confirm the user in Supabase Authentication -> Users, or create the user from User Management.",
+          });
+        }
       }
       const profile = await getUserByEmail(String(email).trim());
       if (profile?.authUserId) {
+        const hint =
+          supabaseResult && !supabaseResult.ok
+            ? `Supabase sign-in failed: ${supabaseResult.error}`
+            : "This account uses Supabase sign-in. Check email/password in Authentication -> Users, or use Forgot password on the login page.";
         return res.status(401).json({
           error: "Invalid credentials",
-          hint: "This account uses Supabase sign-in. Check email/password in Authentication → Users, or use Forgot password on the login page.",
+          hint,
         });
       }
     }

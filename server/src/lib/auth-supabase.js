@@ -67,12 +67,23 @@ export async function signInWithSupabaseAuth(email, password) {
     email: String(email).trim().toLowerCase(),
     password: String(password),
   });
-  if (error || !data.session?.access_token) return null;
+  if (error || !data.session?.access_token) {
+    return {
+      ok: false,
+      error: error?.message || "Supabase sign-in failed",
+    };
+  }
 
   const profile = await resolveProfileFromAccessToken(data.session.access_token);
-  if (!profile) return null;
+  if (!profile) {
+    return {
+      ok: false,
+      error: "Signed in to Supabase, but no active King G profile found",
+    };
+  }
 
   return {
+    ok: true,
     token: data.session.access_token,
     user: toApiUser(profile),
   };
