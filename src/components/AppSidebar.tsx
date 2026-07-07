@@ -214,7 +214,7 @@ export default function AppSidebar() {
           <img src="/logo.png" alt="King G" className="h-9 w-9 shrink-0 rounded-lg object-contain" />
           <div className="min-w-0">
             <h1 className="font-display text-base font-semibold tracking-wide text-foreground">KING G</h1>
-            <p className="text-xs text-muted-foreground">Lifestyle & Lounge</p>
+            <p className="text-xs text-muted-foreground">Lifestyle Lounge</p>
           </div>
         </div>
       </div>
@@ -320,6 +320,11 @@ export default function AppSidebar() {
               >
                 Alerts & Help
               </NavLinkStyle>
+              {user.role === 'manager' && (
+                <NavLinkStyle to="/products" icon={Package} isActive={pathname === '/products'}>
+                  Products
+                </NavLinkStyle>
+              )}
             </div>
 
             {/* Orders & deliveries — Senior Manager only */}
@@ -343,6 +348,16 @@ export default function AppSidebar() {
             {/* Operations */}
             <p className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Operations</p>
             <div className="flex flex-col gap-0.5">
+              {user.role === 'senior_manager' && (
+                <>
+                  <NavLinkStyle to="/ops/receive-stock" icon={Package} isActive={pathname === '/ops/receive-stock'}>
+                    Receive delivery
+                  </NavLinkStyle>
+                  <NavLinkStyle to="/products" icon={Package} isActive={pathname === '/products'}>
+                    Products & prices
+                  </NavLinkStyle>
+                </>
+              )}
               <NavLinkStyle to="/ops/discrepancies" icon={AlertTriangle} isActive={pathname === '/ops/discrepancies'}>
                 Discrepancies
               </NavLinkStyle>

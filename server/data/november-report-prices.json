@@ -1,0 +1,567 @@
+{
+  "importedAt": "2026-07-06T10:58:04.666Z",
+  "source": "NOVEMBER REPORT.xlsx — NOVEMBER STOCKTAKE (SP = selling, COSTP = brewer cost)",
+  "count": 70,
+  "prices": [
+    {
+      "id": "bev-001",
+      "name": "Savanna Dry 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 17.33,
+      "sourceName": "SAVANNA DRY"
+    },
+    {
+      "id": "bev-002",
+      "name": "Stella Artois 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 14.5,
+      "sourceName": "STELLA ARTOIS"
+    },
+    {
+      "id": "bev-004",
+      "name": "Savanna Angry Lemon 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 14.71,
+      "sourceName": "SAVANNA ANGRY LEMON"
+    },
+    {
+      "id": "bev-005",
+      "name": "Extreme Apple 275ml",
+      "sizeMl": 275,
+      "basePrice": 25,
+      "costPrice": 17.35,
+      "sourceName": "EXTREME APPLE"
+    },
+    {
+      "id": "bev-006",
+      "name": "Extreme Apple 440ml",
+      "sizeMl": 440,
+      "basePrice": 30,
+      "costPrice": 27.5,
+      "sourceName": "EXTREME APPLE"
+    },
+    {
+      "id": "bev-007",
+      "name": "Windhoek Draught Can 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 20.42,
+      "sourceName": "WINDHOEK DRAUGHT CAN"
+    },
+    {
+      "id": "bev-008",
+      "name": "Windhoek Lager 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 20.42,
+      "sourceName": "WINDHOEK LAGER"
+    },
+    {
+      "id": "bev-009",
+      "name": "Belgravia Gin And Tonic 275ml",
+      "sizeMl": 275,
+      "basePrice": 25,
+      "costPrice": 16.58,
+      "sourceName": "BELGRAVIA GIN AND TONIC"
+    },
+    {
+      "id": "bev-011",
+      "name": "Belgravia Dry Lemon 275ml",
+      "sizeMl": 275,
+      "basePrice": 25,
+      "costPrice": 16.58,
+      "sourceName": "BELGRAVIA DRY LEMON"
+    },
+    {
+      "id": "bev-012",
+      "name": "Belgravia Gin And Dry Lemon 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 17.84,
+      "sourceName": "BELGRAVIA GIN AND DRY LEMON"
+    },
+    {
+      "id": "bev-010",
+      "name": "Belgravia Gin And Tonic 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 17.84,
+      "sourceName": "BELGRAVIA GIN AND TONIC"
+    },
+    {
+      "id": "bev-013",
+      "name": "Brutal Fruit Ruby Apple 275ml",
+      "sizeMl": 275,
+      "basePrice": 25,
+      "costPrice": 13.15,
+      "sourceName": "BRUTAL FRUIT RUBY APPLE"
+    },
+    {
+      "id": "bev-015",
+      "name": "Bahama Pina Colada 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 13.54,
+      "sourceName": "BAHAMA PINA COLADA"
+    },
+    {
+      "id": "bev-016",
+      "name": "Bahama Watermelon 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 13.54,
+      "sourceName": "BAHAMA WATERMELON"
+    },
+    {
+      "id": "bev-017",
+      "name": "Bahama Strawberry 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 13.54,
+      "sourceName": "BAHAMA STRAWBERRY"
+    },
+    {
+      "id": "bev-018",
+      "name": "Bahama Peach Martini 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 13.54,
+      "sourceName": "BAHAMA PEACH MARTIN"
+    },
+    {
+      "id": "bev-021",
+      "name": "Corona Extra 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 13.15,
+      "sourceName": "CORONA EXTRA"
+    },
+    {
+      "id": "bev-022",
+      "name": "Ice Tropez 275ml",
+      "sizeMl": 275,
+      "basePrice": 80,
+      "costPrice": 65.23,
+      "sourceName": "ICE TROPEZ"
+    },
+    {
+      "id": "bev-023",
+      "name": "Red Square Blue Ice 275ml",
+      "sizeMl": 275,
+      "basePrice": 25,
+      "costPrice": 13.12,
+      "sourceName": "RED  SQUARE BLIE ICE"
+    },
+    {
+      "id": "bev-024",
+      "name": "Red Square Purple Ice 275ml",
+      "sizeMl": 275,
+      "basePrice": 25,
+      "costPrice": 13.12,
+      "sourceName": "RED SQUARE PURPLE ICE"
+    },
+    {
+      "id": "bev-025",
+      "name": "Red Square Red Ice 275ml",
+      "sizeMl": 275,
+      "basePrice": 25,
+      "costPrice": 20.26,
+      "sourceName": "RED SQUARE RED ICE"
+    },
+    {
+      "id": "bev-026",
+      "name": "Kix Rose Spritzer 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 13.15,
+      "sourceName": "KIX ROSE SPRITZER"
+    },
+    {
+      "id": "bev-027",
+      "name": "Powerade 440ml",
+      "sizeMl": 440,
+      "basePrice": 20,
+      "costPrice": 15.86,
+      "sourceName": "POWERADE"
+    },
+    {
+      "id": "bev-014",
+      "name": "Brutal Fruit Ruby Apple 500ml",
+      "sizeMl": 500,
+      "basePrice": 25,
+      "costPrice": 15.5,
+      "sourceName": "BRUTAL FRUIT RUBY APPLE"
+    },
+    {
+      "id": "bev-028",
+      "name": "Red Bull 250ml",
+      "sizeMl": 250,
+      "basePrice": 25,
+      "costPrice": 17.5,
+      "sourceName": "REDBULL"
+    },
+    {
+      "id": "bev-029",
+      "name": "Schweppes Tonic Water 200ml",
+      "sizeMl": 200,
+      "basePrice": 25,
+      "costPrice": 15.5,
+      "sourceName": "SCHWEPPES TONIC WATER"
+    },
+    {
+      "id": "bev-030",
+      "name": "Schweppes Tonic Water 1000ml",
+      "sizeMl": 1000,
+      "basePrice": 25,
+      "costPrice": 15.5,
+      "sourceName": "SCHWEPPES TONIC WATER"
+    },
+    {
+      "id": "bev-032",
+      "name": "Castle Lite 500ml",
+      "sizeMl": 500,
+      "basePrice": 25,
+      "costPrice": 13.25,
+      "sourceName": "CASTLE LITE"
+    },
+    {
+      "id": "bev-034",
+      "name": "Black Label 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 12.75,
+      "sourceName": "BLACKLABEL"
+    },
+    {
+      "id": "bev-035",
+      "name": "Black Label 500ml",
+      "sizeMl": 500,
+      "basePrice": 25,
+      "costPrice": 14.84,
+      "sourceName": "BLACKLABEL"
+    },
+    {
+      "id": "bev-037",
+      "name": "Castle Milk Stout 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 12.75,
+      "sourceName": "CASTLE MILK STOUT"
+    },
+    {
+      "id": "bev-038",
+      "name": "Castle Milk Stout 500ml",
+      "sizeMl": 500,
+      "basePrice": 25,
+      "costPrice": 22.16,
+      "sourceName": "CASTLE MILK STOUT"
+    },
+    {
+      "id": "bev-040",
+      "name": "Heineken 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 12.83,
+      "sourceName": "HEINEKEN"
+    },
+    {
+      "id": "bev-041",
+      "name": "Heineken 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 15.25,
+      "sourceName": "HEINEKEN"
+    },
+    {
+      "id": "bev-043",
+      "name": "Amstel Lager 500ml",
+      "sizeMl": 500,
+      "basePrice": 25,
+      "costPrice": 15.26,
+      "sourceName": "AMSTEL LAGER"
+    },
+    {
+      "id": "bev-045",
+      "name": "Bernini Classic 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 12.36,
+      "sourceName": "BERNIN CLASSIC"
+    },
+    {
+      "id": "bev-047",
+      "name": "Sol 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 13.33,
+      "sourceName": "SOL"
+    },
+    {
+      "id": "bev-031",
+      "name": "Castle Lite 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 13.23,
+      "sourceName": "CASTLE LITE"
+    },
+    {
+      "id": "bev-048",
+      "name": "Bone Head 50ml",
+      "sizeMl": 50,
+      "basePrice": 25,
+      "costPrice": 15.2,
+      "sourceName": "BONE HEAD"
+    },
+    {
+      "id": "bev-049",
+      "name": "Bug Red 20ml",
+      "sizeMl": 20,
+      "basePrice": 15,
+      "costPrice": 10,
+      "sourceName": "BUG RED"
+    },
+    {
+      "id": "bev-050",
+      "name": "Bug Blue 20ml",
+      "sizeMl": 20,
+      "basePrice": 15,
+      "costPrice": 10,
+      "sourceName": "BUG BLUE"
+    },
+    {
+      "id": "bev-051",
+      "name": "Old Buck 750ml",
+      "sizeMl": 750,
+      "basePrice": 350,
+      "costPrice": 162,
+      "sourceName": "OLD BUG"
+    },
+    {
+      "id": "bev-052",
+      "name": "Tanqueray Sevilla 750ml",
+      "sizeMl": 750,
+      "basePrice": 300,
+      "costPrice": 120,
+      "sourceName": "TANQUERRAY SEVILLA"
+    },
+    {
+      "id": "bev-053",
+      "name": "Drosty Hof 750ml",
+      "sizeMl": 750,
+      "basePrice": 70,
+      "costPrice": 52.3,
+      "sourceName": "DROSTY HOF"
+    },
+    {
+      "id": "bev-054",
+      "name": "Amarula 750ml",
+      "sizeMl": 750,
+      "basePrice": 250,
+      "costPrice": 136.23,
+      "sourceName": "AMARULA"
+    },
+    {
+      "id": "bev-055",
+      "name": "Remy Martin Vsop 750ml",
+      "sizeMl": 750,
+      "basePrice": 1500,
+      "costPrice": 932,
+      "sourceName": "REMY  MARTIN VSOP"
+    },
+    {
+      "id": "bev-056",
+      "name": "Robertson Winery Chapel Sweet 750ml",
+      "sizeMl": 750,
+      "basePrice": 350,
+      "costPrice": 154.25,
+      "sourceName": "ROBERTSON WINERY CHAPEL SWEET"
+    },
+    {
+      "id": "bev-057",
+      "name": "Hennessy Vsop 750ml",
+      "sizeMl": 750,
+      "basePrice": 1500,
+      "costPrice": 895.23,
+      "sourceName": "HENESSY VSOP"
+    },
+    {
+      "id": "bev-058",
+      "name": "Hennessy Very Special 750ml",
+      "sizeMl": 750,
+      "basePrice": 850,
+      "costPrice": 620.21,
+      "sourceName": "HENESSY VERY SPECIAL"
+    },
+    {
+      "id": "bev-059",
+      "name": "Jagermeister 750ml",
+      "sizeMl": 750,
+      "basePrice": 350,
+      "costPrice": 215.2,
+      "sourceName": "JAGERMIST"
+    },
+    {
+      "id": "bev-060",
+      "name": "Veuve Clicquot 750ml",
+      "sizeMl": 750,
+      "basePrice": 1500,
+      "costPrice": 954.32,
+      "sourceName": "VEUVE CLICQUOT"
+    },
+    {
+      "id": "bev-061",
+      "name": "Windhoek Draught Bottle 500ml",
+      "sizeMl": 500,
+      "basePrice": 25,
+      "costPrice": 14.75,
+      "sourceName": "WINDHOEK DRAUGHT BOTTLE"
+    },
+    {
+      "id": "bev-046",
+      "name": "Bernini Classic 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 12.2,
+      "sourceName": "BERNIN CLASSIC"
+    },
+    {
+      "id": "bev-062",
+      "name": "Water 1.5L",
+      "sizeMl": 1500,
+      "basePrice": 20,
+      "costPrice": 8.5,
+      "sourceName": "WATER"
+    },
+    {
+      "id": "bev-042",
+      "name": "Heineken 750ml",
+      "sizeMl": 750,
+      "basePrice": 28,
+      "costPrice": 24,
+      "sourceName": "HEINEKEN"
+    },
+    {
+      "id": "bev-033",
+      "name": "Castle Lite 750ml",
+      "sizeMl": 750,
+      "basePrice": 22,
+      "costPrice": 22.5,
+      "sourceName": "CASTLE LITE"
+    },
+    {
+      "id": "bev-065",
+      "name": "Castle Lager 750ml",
+      "sizeMl": 750,
+      "basePrice": 20,
+      "costPrice": 20.33,
+      "sourceName": "CASTLE LAGER"
+    },
+    {
+      "id": "bev-039",
+      "name": "Castle Milk Stout 750ml",
+      "sizeMl": 750,
+      "basePrice": 25,
+      "costPrice": 23,
+      "sourceName": "CASTLE MILK STOUT"
+    },
+    {
+      "id": "bev-003",
+      "name": "Stella Artois 660ml",
+      "sizeMl": 660,
+      "basePrice": 27,
+      "costPrice": 17.26,
+      "sourceName": "STELLA ARTOIS"
+    },
+    {
+      "id": "bev-036",
+      "name": "Black Label 750ml",
+      "sizeMl": 750,
+      "basePrice": 22,
+      "costPrice": 21.75,
+      "sourceName": "BLACK LABEL"
+    },
+    {
+      "id": "bev-068",
+      "name": "Flying Fish 660ml",
+      "sizeMl": 660,
+      "basePrice": 24,
+      "costPrice": 18.68,
+      "sourceName": "FLYING FISH"
+    },
+    {
+      "id": "bev-044",
+      "name": "Amstel Lager 750ml",
+      "sizeMl": 750,
+      "basePrice": 24,
+      "costPrice": 16.26,
+      "sourceName": "AMSTEL LAGER"
+    },
+    {
+      "id": "bev-069",
+      "name": "Windhoek Draught 750ml",
+      "sizeMl": 750,
+      "basePrice": 24,
+      "costPrice": 11.95,
+      "sourceName": "WINDHOEK DRAUGHT"
+    },
+    {
+      "id": "bev-066",
+      "name": "Castle Double Malt 750ml",
+      "sizeMl": 750,
+      "basePrice": 22,
+      "costPrice": 20.83,
+      "sourceName": "CASTLE DOUBLE MALT"
+    },
+    {
+      "id": "bev-067",
+      "name": "Flying Fish 500ml",
+      "sizeMl": 500,
+      "basePrice": 24,
+      "costPrice": 13.56,
+      "sourceName": "FLYING FISH"
+    },
+    {
+      "id": "bev-070",
+      "name": "Hansa 750ml",
+      "sizeMl": 750,
+      "basePrice": 20,
+      "costPrice": 15.36,
+      "sourceName": "HANSA"
+    },
+    {
+      "id": "bev-064",
+      "name": "Castle Lager 500ml",
+      "sizeMl": 500,
+      "basePrice": 12.66,
+      "costPrice": 20,
+      "sourceName": "CASTLE LAGER"
+    },
+    {
+      "id": "bev-019",
+      "name": "Bahama Blueberry 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 13.5,
+      "sourceName": "BAHAMA BLUEBERRY"
+    },
+    {
+      "id": "bev-020",
+      "name": "Bahama Margarita 440ml",
+      "sizeMl": 440,
+      "basePrice": 25,
+      "costPrice": 13.5,
+      "sourceName": "BAHAMA MARGARET"
+    },
+    {
+      "id": "bev-063",
+      "name": "Castle Lager 330ml",
+      "sizeMl": 330,
+      "basePrice": 25,
+      "costPrice": 10.22,
+      "sourceName": "CASTLE LAGER"
+    }
+  ]
+}

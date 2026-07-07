@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { getAllProducts } from '@/lib/pos-api';
+import { useProducts } from '@/contexts/ProductsContext';
 import type { Product } from '@/lib/types';
 import { useHappyHour } from '@/contexts/HappyHourContext';
 import { Search, Plus, Edit, Package, Percent, Sparkles, Pencil, Trash2 } from 'lucide-react';
@@ -25,40 +25,16 @@ import {
 import { toast } from 'sonner';
 import { BackButton } from '@/components/BackButton';
 
-const CATEGORY_OPTIONS = ['Whisky', 'Cognac', 'Champagne', 'Vodka', 'Gin', 'Tequila', 'Beer', 'Liqueur', 'Mixers', 'Other'];
+const CATEGORY_OPTIONS = ['Beer', 'Cider', 'RTD', 'Spirits', 'Wine', 'Whisky', 'Cognac', 'Champagne', 'Vodka', 'Gin', 'Tequila', 'Liqueur', 'Mixers', 'Other'];
+
+function formatSize(sizeMl?: number): string {
+  if (sizeMl == null) return '—';
+  if (sizeMl === 1500) return '1.5L';
+  return `${sizeMl}ml`;
+}
 
 export default function Products() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    getAllProducts()
-      .then((rows) => {
-        if (!cancelled) {
-          setProducts(
-            rows.map((p) => ({
-              id: p.id,
-              name: p.name,
-              barcode: p.barcode,
-              category: p.category,
-              basePrice: p.basePrice,
-              costPrice: p.costPrice,
-              image: p.image,
-            }))
-          );
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setProducts([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingProducts(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { products, loading: loadingProducts, createProduct, updateProduct, deleteProduct } = useProducts();
   const [search, setSearch] = useState('');
   const { user } = useAuth();
   const {
@@ -82,10 +58,19 @@ export default function Products() {
     category: 'Whisky',
     costPrice: '',
     basePrice: '',
+    sizeMl: '',
   });
   const [editFullProduct, setEditFullProduct] = useState<Product | null>(null);
-  const [editFullForm, setEditFullForm] = useState({ name: '', barcode: '', category: 'Whisky', costPrice: '', basePrice: '' });
-  const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [editFullForm, setEditFullForm] = useState({
+    name: '',
+    barcode: '',
+    category: 'Whisky',
+    costPrice: '',
+    basePrice: '',
+    sizeMl: '',
+  });
+  const [deleteProductTarget, setDeleteProductTarget] = useState<Product | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const isManager =
     user?.role === 'manager' ||
@@ -133,15 +118,23 @@ export default function Products() {
   };
 
   const handleOpenAddProduct = () => {
-    setNewProduct({ name: '', barcode: '', category: 'Whisky', costPrice: '', basePrice: '' });
+    setNewProduct({ name: '', barcode: '', category: 'Whisky', costPrice: '', basePrice: '', sizeMl: '' });
     setAddProductOpen(true);
   };
 
-  const handleAddProduct = () => {
+  const parseSizeMl = (raw: string): number | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+  };
+
+  const handleAddProduct = async () => {
     const name = newProduct.name.trim();
     const barcode = newProduct.barcode.trim();
     const costNum = parseFloat(newProduct.costPrice);
     const baseNum = parseFloat(newProduct.basePrice);
+    const sizeMl = parseSizeMl(newProduct.sizeMl);
     if (!name) {
       toast.error('Product name is required.');
       return;
@@ -158,13 +151,27 @@ export default function Products() {
       toast.error('Enter valid cost and price (numbers ≥ 0).');
       return;
     }
-    const id = `p-${Date.now()}`;
-    setProducts((prev) => [
-      ...prev,
-      { id, name, barcode, category: newProduct.category, costPrice: costNum, basePrice: baseNum },
-    ]);
-    toast.success(`"${name}" added.`);
-    setAddProductOpen(false);
+    if (newProduct.sizeMl.trim() && sizeMl === null) {
+      toast.error('Enter a valid size in ml, or leave blank.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createProduct({
+        name,
+        barcode,
+        category: newProduct.category,
+        costPrice: costNum,
+        basePrice: baseNum,
+        sizeMl,
+      });
+      toast.success(`"${name}" added.`);
+      setAddProductOpen(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to add product.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openEditFull = (product: Product) => {
@@ -175,15 +182,17 @@ export default function Products() {
       category: product.category,
       costPrice: String(product.costPrice),
       basePrice: String(product.basePrice),
+      sizeMl: product.sizeMl != null ? String(product.sizeMl) : '',
     });
   };
 
-  const saveEditFull = () => {
+  const saveEditFull = async () => {
     if (!editFullProduct) return;
     const name = editFullForm.name.trim();
     const barcode = editFullForm.barcode.trim();
     const costNum = parseFloat(editFullForm.costPrice);
     const baseNum = parseFloat(editFullForm.basePrice);
+    const sizeMl = parseSizeMl(editFullForm.sizeMl);
     if (!name) {
       toast.error('Product name is required.');
       return;
@@ -201,22 +210,41 @@ export default function Products() {
       toast.error('Enter valid cost and price (numbers ≥ 0).');
       return;
     }
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === editFullProduct.id
-          ? { ...p, name, barcode, category: editFullForm.category, costPrice: costNum, basePrice: baseNum }
-          : p
-      )
-    );
-    toast.success(`"${name}" updated.`);
-    setEditFullProduct(null);
+    if (editFullForm.sizeMl.trim() && sizeMl === null) {
+      toast.error('Enter a valid size in ml, or leave blank.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateProduct(editFullProduct.id, {
+        name,
+        barcode,
+        category: editFullForm.category,
+        costPrice: costNum,
+        basePrice: baseNum,
+        sizeMl,
+      });
+      toast.success(`"${name}" updated.`);
+      setEditFullProduct(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update product.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDeleteProduct = () => {
-    if (!deleteProduct) return;
-    setProducts((prev) => prev.filter((p) => p.id !== deleteProduct.id));
-    toast.success(`"${deleteProduct.name}" removed.`);
-    setDeleteProduct(null);
+  const handleDeleteProduct = async () => {
+    if (!deleteProductTarget) return;
+    setSaving(true);
+    try {
+      await deleteProduct(deleteProductTarget.id);
+      toast.success(`"${deleteProductTarget.name}" removed.`);
+      setDeleteProductTarget(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to delete product.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -231,14 +259,16 @@ export default function Products() {
             {loadingProducts ? 'Loading products…' : `${products.length} products registered`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleOpenAddProduct}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg gold-gradient text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
-        >
-          <Plus className="w-4 h-4" />
-          Add Product
-        </button>
+        {canEditDeleteProduct && (
+          <button
+            type="button"
+            onClick={handleOpenAddProduct}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg gold-gradient text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+          >
+            <Plus className="w-4 h-4" />
+            Add Product
+          </button>
+        )}
       </div>
 
       {isManager && (
@@ -337,6 +367,7 @@ export default function Products() {
           <thead>
             <tr className="border-b border-border">
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Product</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Size</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Barcode</th>
               <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</th>
               <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cost</th>
@@ -350,7 +381,9 @@ export default function Products() {
           </thead>
           <tbody>
             {filtered.map((product, i) => {
-              const margin = ((product.basePrice - product.costPrice) / product.basePrice * 100).toFixed(0);
+              const margin = product.basePrice > 0
+                ? ((product.basePrice - product.costPrice) / product.basePrice * 100).toFixed(0)
+                : '—';
               const productDiscount = getDiscountForProduct(product.id);
               const hasAnyDiscount = productDiscount > 0;
               const displayPrice = hasAnyDiscount ? getEffectivePrice(product.basePrice, product.id) : product.basePrice;
@@ -370,6 +403,7 @@ export default function Products() {
                       <span className="text-sm font-medium text-foreground">{product.name}</span>
                     </div>
                   </td>
+                  <td className="px-5 py-3 text-sm text-muted-foreground">{formatSize(product.sizeMl)}</td>
                   <td className="px-5 py-3 text-sm text-muted-foreground font-mono">{product.barcode}</td>
                   <td className="px-5 py-3">
                     <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">{product.category}</span>
@@ -407,7 +441,7 @@ export default function Products() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => setDeleteProduct(product)}
+                            onClick={() => setDeleteProductTarget(product)}
                             className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
                             aria-label={`Delete ${product.name}`}
                           >
@@ -514,6 +548,18 @@ export default function Products() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="add-size">Size (ml)</Label>
+              <Input
+                id="add-size"
+                type="number"
+                min={1}
+                step={1}
+                value={newProduct.sizeMl}
+                onChange={(e) => setNewProduct((p) => ({ ...p, sizeMl: e.target.value }))}
+                placeholder="e.g. 750 (optional)"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="add-cost">Cost price (R)</Label>
@@ -545,7 +591,9 @@ export default function Products() {
             <Button variant="outline" onClick={() => setAddProductOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleAddProduct}>Add product</Button>
+            <Button onClick={handleAddProduct} disabled={saving}>
+              {saving ? 'Saving…' : 'Add product'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -593,6 +641,19 @@ export default function Products() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
+                  <Label>Size (ml)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={editFullForm.sizeMl}
+                    onChange={(e) => setEditFullForm((f) => ({ ...f, sizeMl: e.target.value }))}
+                    placeholder="e.g. 750"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
                   <Label>Cost price (R)</Label>
                   <Input
                     type="number"
@@ -617,24 +678,28 @@ export default function Products() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditFullProduct(null)}>Cancel</Button>
-            <Button onClick={saveEditFull}>Save changes</Button>
+            <Button onClick={saveEditFull} disabled={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!deleteProduct} onOpenChange={(open) => !open && setDeleteProduct(null)}>
+      <Dialog open={!!deleteProductTarget} onOpenChange={(open) => !open && setDeleteProductTarget(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Delete product</DialogTitle>
           </DialogHeader>
-          {deleteProduct && (
+          {deleteProductTarget && (
             <p className="text-sm text-muted-foreground">
-              Remove <strong>{deleteProduct.name}</strong>? This cannot be undone.
+              Remove <strong>{deleteProductTarget.name}</strong>? This cannot be undone.
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteProduct(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDeleteProduct}>Delete</Button>
+            <Button variant="outline" onClick={() => setDeleteProductTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteProduct} disabled={saving}>
+              {saving ? 'Deleting…' : 'Delete'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -8,6 +8,7 @@ import { ShiftProvider } from "@/contexts/ShiftContext";
 import { HappyHourProvider } from "@/contexts/HappyHourContext";
 import { CartProvider } from "@/contexts/CartContext";
 import { InventoryProvider } from "@/contexts/InventoryContext";
+import { ProductsProvider } from "@/contexts/ProductsContext";
 import { PurchaseOrderProvider } from "@/contexts/PurchaseOrderContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
@@ -67,6 +68,7 @@ const App = () => (
         <ShiftProviderWrapper>
         <HappyHourProvider>
         <InventoryProvider>
+        <ProductsProvider>
         <PurchaseOrderProvider>
         <CartProvider>
         <BrowserRouter
@@ -108,9 +110,12 @@ const App = () => (
               <Route path="/suppliers/deliveries" element={<DeliveriesPage />} />
               <Route path="/cash/reconciliation" element={<CashReconciliationPage />} />
               <Route path="/cash/bank-deposits" element={<BankDepositsPage />} />
-              <Route path="/admin/settings" element={<SystemSettingsPage />} />
-              <Route path="/admin/discount-rules" element={<DiscountRulesPage />} />
-              <Route path="/admin/devices" element={<DevicesPage />} />
+              <Route path="/admin">
+                <Route index element={<Navigate to="/admin/settings" replace />} />
+                <Route path="settings" element={<SystemSettingsPage />} />
+                <Route path="discount-rules" element={<DiscountRulesPage />} />
+                <Route path="devices" element={<DevicesPage />} />
+              </Route>
               <Route path="/ops/receive-stock" element={<ReceiveStockPage />} />
               <Route path="/ops/shifts" element={<ShiftsAttendancePage />} />
               <Route path="/ops/discrepancies" element={<DiscrepanciesPage />} />
@@ -123,6 +128,7 @@ const App = () => (
         </BrowserRouter>
         </CartProvider>
         </PurchaseOrderProvider>
+        </ProductsProvider>
         </InventoryProvider>
         </HappyHourProvider>
         </ShiftProviderWrapper>

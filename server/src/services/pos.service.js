@@ -1,5 +1,25 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { getSupabaseAdmin } from "../lib/supabase.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PRODUCT_SELECT = "id,name,barcode,category,base_price,cost_price,size_ml,image";
+
+function mapProductRow(p, stock = 0) {
+  return {
+    id: p.id,
+    name: p.name,
+    barcode: p.barcode,
+    category: p.category,
+    basePrice: p.base_price,
+    costPrice: p.cost_price,
+    sizeMl: p.size_ml ?? undefined,
+    image: p.image ?? undefined,
+    stock,
+  };
+}
 
 const DEFAULT_SETTINGS = {
   manual_discount_max_percent: "25",
@@ -85,7 +105,7 @@ export async function getAllProducts() {
   const client = await supabase();
   const { data: products, error: pErr } = await client
     .from("products")
-    .select("id,name,barcode,category,base_price,cost_price,image");
+    .select(PRODUCT_SELECT);
   if (pErr) throw pErr;
 
   const { data: inventoryRows, error: iErr } = await client
@@ -94,16 +114,7 @@ export async function getAllProducts() {
   if (iErr) throw iErr;
 
   const stockMap = new Map((inventoryRows ?? []).map((r) => [r.product_id, r.total_qty]));
-  return (products ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    barcode: p.barcode,
-    category: p.category,
-    basePrice: p.base_price,
-    costPrice: p.cost_price,
-    image: p.image ?? undefined,
-    stock: stockMap.get(p.id) ?? 0,
-  }));
+  return (products ?? []).map((p) => mapProductRow(p, stockMap.get(p.id) ?? 0));
 }
 
 export async function getProductByBarcode(barcode) {
@@ -113,7 +124,7 @@ export async function getProductByBarcode(barcode) {
 
   const { data: product, error: pErr } = await client
     .from("products")
-    .select("id,name,barcode,category,base_price,cost_price,image")
+    .select(PRODUCT_SELECT)
     .eq("barcode", trimmed)
     .maybeSingle();
 
@@ -128,16 +139,7 @@ export async function getProductByBarcode(barcode) {
 
   if (iErr) throw iErr;
 
-  return {
-    id: product.id,
-    name: product.name,
-    barcode: product.barcode,
-    category: product.category,
-    basePrice: product.base_price,
-    costPrice: product.cost_price,
-    image: product.image ?? undefined,
-    stock: inv?.total_qty ?? 0,
-  };
+  return mapProductRow(product, inv?.total_qty ?? 0);
 }
 
 export async function searchProducts(q, limit = 20) {
@@ -147,7 +149,7 @@ export async function searchProducts(q, limit = 20) {
 
   let req = client
     .from("products")
-    .select("id,name,barcode,category,base_price,cost_price,image")
+    .select(PRODUCT_SELECT)
     .limit(effectiveLimit);
 
   if (query) {
@@ -171,16 +173,201 @@ export async function searchProducts(q, limit = 20) {
     stockMap = new Map((inventoryRows ?? []).map((r) => [r.product_id, r.total_qty]));
   }
 
-  return (products ?? []).map((p) => ({
+  return (products ?? []).map((p) => mapProductRow(p, stockMap.get(p.id) ?? 0));
+}
+
+export async function seedBeverageCatalog() {
+  const catalogPath = path.resolve(__dirname, "../../data/beverage-stock.json");
+  const catalog = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+  const client = await supabase();
+
+  const productRows = catalog.map((p) => ({
     id: p.id,
     name: p.name,
     barcode: p.barcode,
     category: p.category,
-    basePrice: p.base_price,
-    costPrice: p.cost_price,
-    image: p.image ?? undefined,
-    stock: stockMap.get(p.id) ?? 0,
+    base_price: p.basePrice ?? 0,
+    cost_price: p.costPrice ?? 0,
+    size_ml: p.sizeMl,
+    image: null,
   }));
+
+  const inventoryRows = catalog.map((p) => ({
+    product_id: p.id,
+    total_qty: 0,
+    lounge_qty: 0,
+    warehouse_qty: 0,
+  }));
+
+  const { error: productsError } = await client.from("products").upsert(productRows, { onConflict: "id" });
+  if (productsError) throw productsError;
+
+  const { error: inventoryError } = await client.from("inventory").upsert(inventoryRows, { onConflict: "product_id" });
+  if (inventoryError) throw inventoryError;
+
+  return { count: catalog.length };
+}
+
+const VALID_CATEGORIES = new Set([
+  "Beer", "Cider", "RTD", "Spirits", "Wine", "Whisky", "Cognac", "Champagne",
+  "Vodka", "Gin", "Tequila", "Liqueur", "Mixers", "Other",
+]);
+
+function normalizeProductInput(body = {}) {
+  const name = String(body.name || "").trim();
+  const barcode = String(body.barcode || "").trim();
+  const category = String(body.category || "").trim();
+  const basePrice = Number(body.basePrice ?? body.base_price);
+  const costPrice = Number(body.costPrice ?? body.cost_price);
+  const sizeMlRaw = body.sizeMl ?? body.size_ml;
+  const sizeMl =
+    sizeMlRaw === null || sizeMlRaw === undefined || sizeMlRaw === ""
+      ? null
+      : Number(sizeMlRaw);
+
+  if (!name) throw new Error("Product name is required");
+  if (!barcode) throw new Error("Barcode is required");
+  if (!category || !VALID_CATEGORIES.has(category)) throw new Error("Valid category is required");
+  if (!Number.isFinite(basePrice) || basePrice < 0) throw new Error("Valid selling price is required");
+  if (!Number.isFinite(costPrice) || costPrice < 0) throw new Error("Valid cost price is required");
+  if (sizeMl !== null && (!Number.isFinite(sizeMl) || sizeMl <= 0)) {
+    throw new Error("Size (ml) must be a positive number when provided");
+  }
+
+  return { name, barcode, category, basePrice, costPrice, sizeMl };
+}
+
+async function getProductByBarcodeExcluding(barcode, excludeId = null) {
+  const client = await supabase();
+  const trimmed = String(barcode || "").trim();
+  if (!trimmed) return null;
+
+  let req = client.from("products").select("id,barcode").eq("barcode", trimmed);
+  if (excludeId) req = req.neq("id", excludeId);
+  const { data, error } = await req.maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function createProduct(body) {
+  const input = normalizeProductInput(body);
+  const existing = await getProductByBarcodeExcluding(input.barcode);
+  if (existing) throw new Error("A product with this barcode already exists");
+
+  const client = await supabase();
+  const id = randomId("prod");
+  const row = {
+    id,
+    name: input.name,
+    barcode: input.barcode,
+    category: input.category,
+    base_price: input.basePrice,
+    cost_price: input.costPrice,
+    size_ml: input.sizeMl,
+    image: null,
+  };
+
+  const { data, error } = await client.from("products").insert(row).select(PRODUCT_SELECT).single();
+  if (error) throw error;
+
+  const { error: invError } = await client.from("inventory").insert({
+    product_id: id,
+    total_qty: 0,
+    lounge_qty: 0,
+    warehouse_qty: 0,
+  });
+  if (invError) {
+    await client.from("products").delete().eq("id", id);
+    throw invError;
+  }
+
+  return mapProductRow(data, 0);
+}
+
+export async function updateProduct(id, body) {
+  const productId = String(id || "").trim();
+  if (!productId) throw new Error("Product id is required");
+
+  const input = normalizeProductInput(body);
+  const client = await supabase();
+
+  const { data: current, error: curErr } = await client
+    .from("products")
+    .select("id")
+    .eq("id", productId)
+    .maybeSingle();
+  if (curErr) throw curErr;
+  if (!current) throw new Error("Product not found");
+
+  const duplicate = await getProductByBarcodeExcluding(input.barcode, productId);
+  if (duplicate) throw new Error("Another product already uses this barcode");
+
+  const { data, error } = await client
+    .from("products")
+    .update({
+      name: input.name,
+      barcode: input.barcode,
+      category: input.category,
+      base_price: input.basePrice,
+      cost_price: input.costPrice,
+      size_ml: input.sizeMl,
+    })
+    .eq("id", productId)
+    .select(PRODUCT_SELECT)
+    .single();
+  if (error) throw error;
+
+  const { data: inv } = await client
+    .from("inventory")
+    .select("total_qty")
+    .eq("product_id", productId)
+    .maybeSingle();
+
+  return mapProductRow(data, inv?.total_qty ?? 0);
+}
+
+export async function deleteProduct(id) {
+  const productId = String(id || "").trim();
+  if (!productId) throw new Error("Product id is required");
+
+  const client = await supabase();
+  const { data: current, error: curErr } = await client
+    .from("products")
+    .select("id,name")
+    .eq("id", productId)
+    .maybeSingle();
+  if (curErr) throw curErr;
+  if (!current) throw new Error("Product not found");
+
+  const { error } = await client.from("products").delete().eq("id", productId);
+  if (error) throw error;
+  return { id: productId, name: current.name };
+}
+
+export async function getInventoryBalances() {
+  const client = await supabase();
+  const { data: products, error: pErr } = await client.from("products").select(PRODUCT_SELECT);
+  if (pErr) throw pErr;
+
+  const { data: invRows, error: iErr } = await client
+    .from("inventory")
+    .select("product_id,total_qty,lounge_qty,warehouse_qty");
+  if (iErr) throw iErr;
+
+  const invMap = new Map((invRows ?? []).map((r) => [r.product_id, r]));
+  return (products ?? []).map((p) => {
+    const inv = invMap.get(p.id) ?? {};
+    return {
+      productId: p.id,
+      productName: p.name,
+      category: p.category,
+      costPrice: Number(p.cost_price ?? 0),
+      basePrice: Number(p.base_price ?? 0),
+      loungeQty: Number(inv.lounge_qty ?? 0),
+      warehouseQty: Number(inv.warehouse_qty ?? 0),
+      totalQty: Number(inv.total_qty ?? 0),
+    };
+  });
 }
 
 export async function getCategories() {

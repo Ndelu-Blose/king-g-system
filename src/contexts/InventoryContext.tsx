@@ -1,16 +1,16 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import type { InventoryBalance } from '@/lib/types';
+import { getInventoryBalances, subscribeToProductCatalog } from '@/lib/pos-api';
 
 export type StockLocation = 'lounge' | 'warehouse';
 
 type InventoryContextValue = {
   inventory: InventoryBalance[];
+  loading: boolean;
+  refreshInventory: () => Promise<void>;
   addWarehouseStock: (productId: string, qty: number) => void;
-  /** Receive stock into lounge or warehouse (e.g. delivery). */
   receiveStock: (productId: string, qty: number, location: StockLocation) => void;
-  /** Move stock between lounge and warehouse. */
   transferStock: (productId: string, qty: number, from: StockLocation, to: StockLocation) => void;
-  /** Apply stock take result: set total qty to counted (variance applied to warehouse). */
   applyStockTake: (productId: string, newTotalQty: number) => void;
 };
 
@@ -18,6 +18,29 @@ const InventoryContext = createContext<InventoryContextValue | null>(null);
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const [inventory, setInventory] = useState<InventoryBalance[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refreshInventory = useCallback(async () => {
+    setLoading(true);
+    try {
+      const rows = await getInventoryBalances();
+      setInventory(rows);
+    } catch {
+      setInventory([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshInventory();
+  }, [refreshInventory]);
+
+  useEffect(() => {
+    return subscribeToProductCatalog(() => {
+      void refreshInventory();
+    });
+  }, [refreshInventory]);
 
   const addWarehouseStock = useCallback((productId: string, qty: number) => {
     setInventory((prev) =>
@@ -102,7 +125,17 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <InventoryContext.Provider value={{ inventory, addWarehouseStock, receiveStock, transferStock, applyStockTake }}>
+    <InventoryContext.Provider
+      value={{
+        inventory,
+        loading,
+        refreshInventory,
+        addWarehouseStock,
+        receiveStock,
+        transferStock,
+        applyStockTake,
+      }}
+    >
       {children}
     </InventoryContext.Provider>
   );
@@ -113,6 +146,8 @@ export function useInventory() {
   if (!ctx) {
     return {
       inventory: [] as InventoryBalance[],
+      loading: false,
+      refreshInventory: async () => {},
       addWarehouseStock: () => {},
       receiveStock: () => {},
       transferStock: () => {},

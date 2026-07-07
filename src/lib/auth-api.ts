@@ -1,8 +1,11 @@
-import type { User } from './types';
-import { getApiBase } from './api-base';
+import type { User, UserRole } from './types';
+import { getApiBase, usesLocalApiProxy } from './api-base';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
 export const TOKEN_KEY = 'kingg_token';
+
+const USE_DIRECT_SUPABASE =
+  isSupabaseConfigured && import.meta.env.VITE_USE_DIRECT_SUPABASE === 'true';
 
 export type LoginResult =
   | { ok: true; user: User; token: string }
@@ -18,7 +21,36 @@ function mapAuthError(message: string): string {
   return message || 'Sign-in failed.';
 }
 
+async function loadUserProfileFromSupabase(): Promise<User | null> {
+  const { data: sessionData } = await getSupabase().auth.getSession();
+  const authId = sessionData.session?.user?.id;
+  const email = sessionData.session?.user?.email?.trim().toLowerCase();
+  if (!authId && !email) return null;
+
+  let query = getSupabase()
+    .from('users')
+    .select('id,name,email,role,active')
+    .eq('active', true);
+
+  if (authId) query = query.eq('auth_user_id', authId);
+  else if (email) query = query.eq('email', email);
+
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    name: data.name,
+    email: data.email,
+    role: data.role as UserRole,
+  };
+}
+
 async function loadUserFromToken(token: string): Promise<User | null> {
+  if (USE_DIRECT_SUPABASE) {
+    return loadUserProfileFromSupabase();
+  }
+
   const res = await fetch(`${getApiBase()}/api/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -56,20 +88,36 @@ export async function loginWithApi(email: string, password: string): Promise<Log
     const supabaseResult = await loginWithSupabase(email, password);
     if (supabaseResult.ok) return supabaseResult;
 
-    // Fallback protects logins when frontend Supabase config is out of sync
-    // with the backend auth mode (common during env changes/migrations).
-    try {
-      const apiResult = await loginWithApiFallback(email, password);
-      if (apiResult.ok) return apiResult;
-      const mergedMessage =
-        apiResult.error && apiResult.error !== supabaseResult.error
-          ? `${supabaseResult.error} ${apiResult.error}`
-          : supabaseResult.error;
-      return { ok: false, error: mergedMessage };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : supabaseResult.error;
-      return { ok: false, error: msg };
+    // When using direct Supabase for data, only fall back to a remote API if one is configured.
+    if (!USE_DIRECT_SUPABASE || getApiBase()) {
+      try {
+        const apiResult = await loginWithApiFallback(email, password);
+        if (apiResult.ok) return apiResult;
+        const mergedMessage =
+          apiResult.error && apiResult.error !== supabaseResult.error
+            ? `${supabaseResult.error} ${apiResult.error}`
+            : supabaseResult.error;
+        return { ok: false, error: mergedMessage };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : supabaseResult.error;
+        return { ok: false, error: msg };
+      }
     }
+
+    // Vite dev: try same-origin /api login (legacy hash or richer server errors)
+    if (usesLocalApiProxy()) {
+      try {
+        const apiResult = await loginWithApiFallback(email, password);
+        if (apiResult.ok) return apiResult;
+        if (apiResult.error && apiResult.error !== supabaseResult.error) {
+          return { ok: false, error: apiResult.error };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return { ok: false, error: supabaseResult.error };
   }
 
   return loginWithApiFallback(email, password);

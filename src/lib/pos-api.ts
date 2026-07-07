@@ -1,7 +1,7 @@
 /**
  * POS API layer: calls Node backend or Supabase when configured.
  */
-import { type Transaction } from './types';
+import { type Transaction, type InventoryBalance } from './types';
 import type { Product, SalePayload, AuditEntry, ProductWithStock } from '@/types/pos';
 import { isSupabaseConfigured, supabase } from './supabase';
 
@@ -120,8 +120,75 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
     headers: authHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API ${res.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error || `API ${res.status}`);
+  }
   return res.json();
+}
+
+async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error || `API ${res.status}`);
+  }
+  return res.json();
+}
+
+async function apiDelete<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error || `API ${res.status}`);
+  }
+  return res.json();
+}
+
+export type ProductInput = {
+  name: string;
+  barcode: string;
+  category: string;
+  basePrice: number;
+  costPrice: number;
+  sizeMl?: number | null;
+};
+
+/** Create product in database (owner / senior manager). */
+export async function createProduct(input: ProductInput): Promise<ProductWithStock> {
+  return apiPost<ProductWithStock>('/api/products', input);
+}
+
+/** Update product in database (owner / senior manager). */
+export async function updateProduct(id: string, input: ProductInput): Promise<ProductWithStock> {
+  return apiPut<ProductWithStock>(`/api/products/${encodeURIComponent(id)}`, input);
+}
+
+/** Delete product from database (owner / senior manager). */
+export async function deleteProduct(id: string): Promise<{ ok: true; id: string; name: string }> {
+  return apiDelete<{ ok: true; id: string; name: string }>(`/api/products/${encodeURIComponent(id)}`);
+}
+
+/** Subscribe to live product/inventory changes (Supabase realtime). */
+export function subscribeToProductCatalog(onChange: () => void): () => void {
+  if (!isSupabaseConfigured) return () => undefined;
+
+  const channel = supabase
+    .channel('product-catalog-sync')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, onChange)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, onChange)
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }
 
 /** Get product by barcode from backend or Supabase. */
@@ -131,7 +198,7 @@ export async function getProductByBarcode(barcode: string): Promise<ProductWithS
   if (USE_DIRECT_SUPABASE) {
     const { data, error } = await supabase
       .from('products')
-      .select('id,name,barcode,category,base_price,cost_price,image,inventory(total_qty)')
+      .select('id,name,barcode,category,base_price,cost_price,size_ml,image,inventory(total_qty)')
       .eq('barcode', trimmed)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -143,6 +210,7 @@ export async function getProductByBarcode(barcode: string): Promise<ProductWithS
       category: data.category,
       basePrice: data.base_price,
       costPrice: data.cost_price,
+      sizeMl: data.size_ml ?? undefined,
       image: data.image ?? undefined,
       stock: data.inventory?.[0]?.total_qty ?? 0,
     };
@@ -161,7 +229,7 @@ export async function searchProducts(query: string, limit = 20): Promise<Product
     const q = query.trim();
     let req = supabase
       .from('products')
-      .select('id,name,barcode,category,base_price,cost_price,image')
+      .select('id,name,barcode,category,base_price,cost_price,size_ml,image,inventory(total_qty)')
       .limit(limit);
     if (q) req = req.or(`name.ilike.%${q}%,barcode.ilike.%${q}%,category.ilike.%${q}%`);
     const { data, error } = await req;
@@ -173,7 +241,9 @@ export async function searchProducts(query: string, limit = 20): Promise<Product
       category: p.category,
       basePrice: p.base_price,
       costPrice: p.cost_price,
+      sizeMl: p.size_ml ?? undefined,
       image: p.image ?? undefined,
+      stock: p.inventory?.[0]?.total_qty ?? 0,
     }));
   }
   try {
@@ -189,7 +259,7 @@ export async function getAllProducts(): Promise<ProductWithStock[]> {
   if (USE_DIRECT_SUPABASE) {
     const { data: products, error: pErr } = await supabase
       .from('products')
-      .select('id,name,barcode,category,base_price,cost_price,image');
+      .select('id,name,barcode,category,base_price,cost_price,size_ml,image');
     if (pErr) throw new Error(pErr.message);
     const { data: inventoryRows, error: iErr } = await supabase
       .from('inventory')
@@ -203,12 +273,48 @@ export async function getAllProducts(): Promise<ProductWithStock[]> {
       category: p.category,
       basePrice: p.base_price,
       costPrice: p.cost_price,
+      sizeMl: p.size_ml ?? undefined,
       image: p.image ?? undefined,
       stock: stockMap.get(p.id) ?? 0,
     }));
   }
   try {
     return await apiGet<ProductWithStock[]>('/api/products');
+  } catch {
+    return [];
+  }
+}
+
+/** Lounge + warehouse stock balances for inventory screens. */
+export async function getInventoryBalances(): Promise<InventoryBalance[]> {
+  if (USE_DIRECT_SUPABASE) {
+    const { data: products, error: pErr } = await supabase
+      .from('products')
+      .select('id,name,category,base_price,cost_price');
+    if (pErr) throw new Error(pErr.message);
+
+    const { data: invRows, error: iErr } = await supabase
+      .from('inventory')
+      .select('product_id,total_qty,lounge_qty,warehouse_qty');
+    if (iErr) throw new Error(iErr.message);
+
+    const invMap = new Map((invRows ?? []).map((r) => [r.product_id, r]));
+    return (products ?? []).map((p) => {
+      const inv = invMap.get(p.id);
+      return {
+        productId: p.id,
+        productName: p.name,
+        category: p.category,
+        costPrice: Number(p.cost_price ?? 0),
+        basePrice: Number(p.base_price ?? 0),
+        loungeQty: Number(inv?.lounge_qty ?? 0),
+        warehouseQty: Number(inv?.warehouse_qty ?? 0),
+        totalQty: Number(inv?.total_qty ?? 0),
+      };
+    });
+  }
+  try {
+    return await apiGet<InventoryBalance[]>('/api/inventory/balances');
   } catch {
     return [];
   }

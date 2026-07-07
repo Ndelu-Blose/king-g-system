@@ -9,6 +9,7 @@
  * - Print receipt
  * - End own shift / cash-up (basic)
  * - Sales History (my shift / today)
+ * - Shift history (open/close times)
  * - Open shift / Help (call manager)
  *
  * Cashier CANNOT:
@@ -17,7 +18,7 @@
  * - See full business reports (only own sales history)
  */
 
-export const CASHIER_ALLOWED_PATHS = ['/pos', '/pos/sales-history'] as const;
+export const CASHIER_ALLOWED_PATHS = ['/pos', '/pos/sales-history', '/shift-history'] as const;
 
 export function isCashierAllowedPath(pathname: string): boolean {
   return (

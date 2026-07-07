@@ -214,8 +214,9 @@ export function hasAnyPermission(role: UserRole, permissions: Permission[]): boo
 /** Route path pattern -> permissions (user needs at least one to access). */
 const ROUTE_PERMISSIONS: Array<{ pattern: RegExp | string; permissions: Permission[] }> = [
   { pattern: '/dashboard', permissions: [PERMISSIONS.REPORT_VIEW, PERMISSIONS.SALE_CREATE, PERMISSIONS.APPROVALS_VIEW, PERMISSIONS.AUDIT_VIEW] },
-  { pattern: '/pos', permissions: [PERMISSIONS.SALE_CREATE] },
   { pattern: /^\/pos\/sales-history/, permissions: [PERMISSIONS.REPORT_VIEW_OWN_SHIFT] },
+  { pattern: '/pos', permissions: [PERMISSIONS.SALE_CREATE] },
+  { pattern: '/shift-history', permissions: [PERMISSIONS.REPORT_VIEW_OWN_SHIFT] },
   { pattern: '/products', permissions: [PERMISSIONS.INVENTORY_VIEW] },
   { pattern: /^\/inventory/, permissions: [PERMISSIONS.INVENTORY_VIEW, PERMISSIONS.INVENTORY_RECEIVE, PERMISSIONS.INVENTORY_COUNT, PERMISSIONS.INVENTORY_TRANSFER] },
   { pattern: '/refund-approvals', permissions: [PERMISSIONS.REFUND_APPROVE, PERMISSIONS.APPROVALS_VIEW] },

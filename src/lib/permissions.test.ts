@@ -37,9 +37,10 @@ describe('permissions', () => {
     expect(hasAnyPermission('owner', [PERMISSIONS.ADMIN_USERS])).toBe(true);
   });
 
-  it('canAccessRoute allows cashier to access /pos', () => {
+  it('canAccessRoute allows cashier to access /pos and /shift-history', () => {
     expect(canAccessRoute('cashier', '/pos')).toBe(true);
     expect(canAccessRoute('cashier', '/pos/sales-history')).toBe(true);
+    expect(canAccessRoute('cashier', '/shift-history')).toBe(true);
   });
 
   it('canAccessRoute denies cashier from /users (admin)', () => {

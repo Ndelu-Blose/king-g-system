@@ -1,6 +1,24 @@
 import type { ManagedUser, UserRole } from './types';
 import { authHeaders, clearStoredToken, isAuthFailureStatus } from './auth-api';
-import { getApiBase } from './api-base';
+import { getApiBase, usesLocalApiProxy } from './api-base';
+import { getSupabase, isSupabaseConfigured } from './supabase';
+
+const USE_DIRECT_SUPABASE =
+  isSupabaseConfigured && import.meta.env.VITE_USE_DIRECT_SUPABASE === 'true';
+
+/** Hosted API (same Supabase project) — used for user writes when local API is not running. */
+const HOSTED_API_URL = 'https://king-g-api.vercel.app';
+
+function getUsersWriteBase(): string {
+  const configured = getApiBase();
+  if (configured) return configured;
+  if (USE_DIRECT_SUPABASE) {
+    // Local API has service role and creates Supabase Auth users; hosted API often does not.
+    if (usesLocalApiProxy()) return '';
+    return HOSTED_API_URL;
+  }
+  return '';
+}
 
 export class ApiAuthError extends Error {
   constructor(message: string) {
@@ -36,8 +54,8 @@ async function apiGet<T>(path: string): Promise<T> {
   return res.json();
 }
 
-async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, {
+async function usersWritePost<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${getUsersWriteBase()}${path}`, {
     method: 'POST',
     headers: authHeaders(),
     body: JSON.stringify(body),
@@ -46,8 +64,8 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, {
+async function usersWritePatch<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${getUsersWriteBase()}${path}`, {
     method: 'PATCH',
     headers: authHeaders(),
     body: JSON.stringify(body),
@@ -56,15 +74,39 @@ async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-async function apiDelete(path: string): Promise<void> {
-  const res = await fetch(`${getApiBase()}${path}`, {
+async function usersWriteDelete(path: string): Promise<void> {
+  const res = await fetch(`${getUsersWriteBase()}${path}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
   await handleResponse(res);
 }
 
+function mapManagedUser(row: {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  active: boolean | null;
+}): ManagedUser {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role as UserRole,
+    active: row.active !== false,
+  };
+}
+
 export async function fetchUsers(): Promise<ManagedUser[]> {
+  if (USE_DIRECT_SUPABASE) {
+    const { data, error } = await getSupabase()
+      .from('users')
+      .select('id,name,email,role,active')
+      .order('name', { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(mapManagedUser);
+  }
   return apiGet<ManagedUser[]>('/api/users');
 }
 
@@ -74,20 +116,29 @@ export async function createUser(payload: {
   role: UserRole;
   password: string;
 }): Promise<ManagedUser> {
-  return apiPost<ManagedUser>('/api/users', payload);
+  const created = await usersWritePost<ManagedUser & { authUserId?: string | null }>(
+    '/api/users',
+    payload,
+  );
+  if (USE_DIRECT_SUPABASE && !created.authUserId) {
+    throw new Error(
+      'User profile saved, but login was not created. Run "npm run api" in a second terminal and add the user again.',
+    );
+  }
+  return created;
 }
 
 export async function updateUser(
   id: string,
   payload: Partial<{ name: string; email: string; role: UserRole; active: boolean }>
 ): Promise<ManagedUser> {
-  return apiPatch<ManagedUser>(`/api/users/${encodeURIComponent(id)}`, payload);
+  return usersWritePatch<ManagedUser>(`/api/users/${encodeURIComponent(id)}`, payload);
 }
 
 export async function changeUserPassword(id: string, password: string): Promise<void> {
-  await apiPatch(`/api/users/${encodeURIComponent(id)}/password`, { password });
+  await usersWritePatch(`/api/users/${encodeURIComponent(id)}/password`, { password });
 }
 
 export async function deleteUser(id: string): Promise<void> {
-  await apiDelete(`/api/users/${encodeURIComponent(id)}`);
+  await usersWriteDelete(`/api/users/${encodeURIComponent(id)}`);
 }

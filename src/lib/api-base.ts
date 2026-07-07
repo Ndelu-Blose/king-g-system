@@ -10,3 +10,8 @@ export function getApiBase(): string {
   }
   return '';
 }
+
+/** Vite dev server with same-origin `/api` proxy (works on localhost and LAN IP). */
+export function usesLocalApiProxy(): boolean {
+  return import.meta.env.DEV && !getApiBase();
+}

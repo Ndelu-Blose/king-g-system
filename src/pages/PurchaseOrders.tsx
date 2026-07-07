@@ -65,6 +65,7 @@ export default function PurchaseOrdersPage() {
   const [deliveryInvoiceUrl, setDeliveryInvoiceUrl] = useState('');
   const [deliveredQtys, setDeliveredQtys] = useState<Record<string, string>>({});
   const [supplierOptions, setSupplierOptions] = useState<string[]>([]);
+  const [createPoOpen, setCreatePoOpen] = useState(false);
 
   useEffect(() => {
     if (createPoOpen) setSupplierOptions(getSupplierNames());
@@ -127,7 +128,6 @@ export default function PurchaseOrdersPage() {
     setCreatePoOpen(false);
   };
 
-  const [createPoOpen, setCreatePoOpen] = useState(false);
   const openCreatePo = () => {
     handleStartCreate();
     setCreatePoOpen(true);

@@ -1,14 +1,130 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Search, UserPlus } from 'lucide-react';
+import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCart } from '@/contexts/CartContext';
 import { useHappyHour } from '@/contexts/HappyHourContext';
-import { searchProducts, getAllProducts, getCategories } from '@/lib/pos-api';
+import { useProducts } from '@/contexts/ProductsContext';
+import { searchProducts, getCategories } from '@/lib/pos-api';
 import type { Product, ProductWithStock } from '@/types/pos';
 import { cn } from '@/lib/utils';
+
+function resolveStock(product: Product, stockById: Map<string, number>): number {
+  if (typeof product.stock === 'number') return product.stock;
+  return stockById.get(product.id) ?? 0;
+}
+
+function withStock(product: Product, stock: number): ProductWithStock {
+  return { ...product, stock };
+}
+
+function ProductGridCard({
+  product,
+  stock,
+  price,
+  onSelect,
+}: {
+  product: Product;
+  stock: number;
+  price: number;
+  onSelect: () => void;
+}) {
+  const outOfStock = stock <= 0;
+
+  return (
+    <motion.button
+      key={product.id}
+      type="button"
+      whileTap={outOfStock ? undefined : { scale: 0.97 }}
+      disabled={outOfStock}
+      onClick={onSelect}
+      aria-disabled={outOfStock}
+      className={cn(
+        'glass-card p-3 text-left flex flex-col rounded-lg min-h-[100px] relative',
+        outOfStock
+          ? 'opacity-50 cursor-not-allowed border border-dashed border-muted-foreground/40 bg-muted/20'
+          : 'card-hover'
+      )}
+    >
+      {outOfStock && (
+        <span className="absolute top-1.5 left-1.5 right-1.5 text-center text-[9px] font-bold uppercase tracking-wide text-destructive bg-destructive/15 border border-destructive/30 px-1 py-0.5 rounded">
+          Out of stock
+        </span>
+      )}
+      <div
+        className={cn(
+          'w-full h-12 rounded-lg flex items-center justify-center mb-2 flex-shrink-0 mt-4',
+          outOfStock ? 'bg-muted/40 grayscale' : 'bg-secondary/50'
+        )}
+      >
+        <span className="text-xl">🥃</span>
+      </div>
+      <p
+        className={cn(
+          'text-xs font-medium leading-snug line-clamp-2 min-h-[2rem]',
+          outOfStock ? 'text-muted-foreground' : 'text-foreground'
+        )}
+      >
+        {product.name}
+      </p>
+      <p className="text-xs text-muted-foreground">{product.category}</p>
+      <p
+        className={cn(
+          'text-sm font-bold mt-auto pt-1 tabular-nums',
+          outOfStock ? 'text-muted-foreground' : 'text-primary'
+        )}
+      >
+        R{price.toFixed(2)}
+      </p>
+    </motion.button>
+  );
+}
+
+function SearchResultRow({
+  product,
+  stock,
+  price,
+  onSelect,
+}: {
+  product: Product;
+  stock: number;
+  price: number;
+  onSelect: () => void;
+}) {
+  const outOfStock = stock <= 0;
+
+  return (
+    <button
+      type="button"
+      disabled={outOfStock}
+      onClick={onSelect}
+      className={cn(
+        'w-full text-left px-3 py-2 rounded-md text-sm flex justify-between items-center gap-2',
+        outOfStock
+          ? 'opacity-50 cursor-not-allowed bg-muted/30'
+          : 'hover:bg-accent'
+      )}
+    >
+      <span className="min-w-0">
+        <span className={cn('block truncate', outOfStock && 'text-muted-foreground')}>{product.name}</span>
+        {outOfStock && (
+          <span className="text-[10px] font-semibold uppercase text-destructive">Out of stock</span>
+        )}
+      </span>
+      <span
+        className={cn(
+          'font-medium tabular-nums shrink-0',
+          outOfStock ? 'text-muted-foreground' : 'text-primary'
+        )}
+      >
+        R{price.toFixed(2)}
+      </span>
+    </button>
+  );
+}
 
 interface ProductGridSearchProps {
   /** When true, search bar is visible (manual add mode). */
@@ -37,7 +153,7 @@ export function ProductGridSearch({
   const [searchOpen, setSearchOpen] = useState(false);
   const [categories, setCategories] = useState<string[]>(['All']);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
-  const [allProducts, setAllProducts] = useState<ProductWithStock[]>([]);
+  const { products: allProducts } = useProducts();
   const searchRef = useRef<HTMLDivElement>(null);
   const { addProduct } = useCart();
   const { getEffectivePrice } = useHappyHour();
@@ -46,9 +162,6 @@ export function ProductGridSearch({
 
   useEffect(() => {
     getCategories().then(setCategories);
-  }, []);
-  useEffect(() => {
-    getAllProducts().then(setAllProducts);
   }, []);
 
   useEffect(() => {
@@ -67,6 +180,31 @@ export function ProductGridSearch({
     return allProducts.filter((p) => p.category === selectedCategory);
   }, [allProducts, selectedCategory]);
 
+  const stockById = useMemo(
+    () => new Map(allProducts.map((p) => [p.id, p.stock ?? 0])),
+    [allProducts]
+  );
+
+  const tryAddProduct = (product: Product) => {
+    const stock = resolveStock(product, stockById);
+    if (stock <= 0) {
+      toast.error(`${product.name} is out of stock`);
+      return;
+    }
+    const added = addProduct(withStock(product, stock));
+    if (!added) {
+      toast.error(`${product.name} is out of stock`);
+      return;
+    }
+    if (onControlledQueryChange) {
+      onControlledQueryChange('');
+    } else {
+      setQuery('');
+    }
+    setSearchOpen(false);
+    if (!onControlledQueryChange && manualMode) onCloseManualMode();
+  };
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -78,14 +216,7 @@ export function ProductGridSearch({
   }, []);
 
   const handleSelectProduct = (product: Product) => {
-    addProduct(product);
-    if (onControlledQueryChange) {
-      onControlledQueryChange('');
-    } else {
-      setQuery('');
-    }
-    setSearchOpen(false);
-    if (!onControlledQueryChange && manualMode) onCloseManualMode();
+    tryAddProduct(product);
   };
 
   const handleCloseManualMode = () => {
@@ -120,22 +251,19 @@ export function ProductGridSearch({
                 <p className="p-3 text-sm text-muted-foreground">No products found</p>
               ) : (
                 <ul className="p-1">
-                  {searchResults.map((p) => (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        onClick={() => handleSelectProduct(p)}
-                        className={cn(
-                          'w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent flex justify-between items-center'
-                        )}
-                      >
-                        <span className="truncate">{p.name}</span>
-                        <span className="text-primary font-medium tabular-nums ml-2">
-                          R{getEffectivePrice(p.basePrice, p.id).toFixed(2)}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                  {searchResults.map((p) => {
+                    const stock = resolveStock(p, stockById);
+                    return (
+                      <li key={p.id}>
+                        <SearchResultRow
+                          product={p}
+                          stock={stock}
+                          price={getEffectivePrice(p.basePrice, p.id)}
+                          onSelect={() => handleSelectProduct(p)}
+                        />
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </ScrollArea>
@@ -161,22 +289,13 @@ export function ProductGridSearch({
         <ScrollArea className="flex-1 pr-2">
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 content-start">
             {filteredGrid.map((product) => (
-              <motion.button
+              <ProductGridCard
                 key={product.id}
-                type="button"
-                whileTap={{ scale: 0.97 }}
-                onClick={() => handleSelectProduct(product)}
-                className="glass-card card-hover p-3 text-left flex flex-col rounded-lg min-h-[90px]"
-              >
-                <div className="w-full h-12 rounded-lg bg-secondary/50 flex items-center justify-center mb-2 flex-shrink-0">
-                  <span className="text-xl">🥃</span>
-                </div>
-                <p className="text-xs font-medium text-foreground truncate">{product.name}</p>
-                <p className="text-xs text-muted-foreground">{product.category}</p>
-                <p className="text-sm font-bold text-primary mt-auto pt-1 tabular-nums">
-                  R{getEffectivePrice(product.basePrice, product.id).toFixed(2)}
-                </p>
-              </motion.button>
+                product={product}
+                stock={product.stock ?? 0}
+                price={getEffectivePrice(product.basePrice, product.id)}
+                onSelect={() => handleSelectProduct(product)}
+              />
             ))}
           </div>
         </ScrollArea>
@@ -236,22 +355,19 @@ export function ProductGridSearch({
                       <p className="p-3 text-sm text-muted-foreground">No products found</p>
                     ) : (
                       <ul className="p-1">
-                        {searchResults.map((p) => (
-                          <li key={p.id}>
-                            <button
-                              type="button"
-                              onClick={() => handleSelectProduct(p)}
-                              className={cn(
-                                'w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent flex justify-between items-center'
-                              )}
-                            >
-                              <span className="truncate">{p.name}</span>
-                              <span className="text-primary font-medium tabular-nums ml-2">
-                                R{getEffectivePrice(p.basePrice, p.id).toFixed(2)}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
+                        {searchResults.map((p) => {
+                          const stock = resolveStock(p, stockById);
+                          return (
+                            <li key={p.id}>
+                              <SearchResultRow
+                                product={p}
+                                stock={stock}
+                                price={getEffectivePrice(p.basePrice, p.id)}
+                                onSelect={() => handleSelectProduct(p)}
+                              />
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </ScrollArea>
@@ -288,22 +404,13 @@ export function ProductGridSearch({
         <ScrollArea className="flex-1 pr-2">
           <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2 content-start">
             {filteredGrid.map((product) => (
-              <motion.button
+              <ProductGridCard
                 key={product.id}
-                type="button"
-                whileTap={{ scale: 0.97 }}
-                onClick={() => handleSelectProduct(product)}
-                className="glass-card card-hover p-3 text-left flex flex-col rounded-lg min-h-[90px]"
-              >
-                <div className="w-full h-12 rounded-lg bg-secondary/50 flex items-center justify-center mb-2 flex-shrink-0">
-                  <span className="text-xl">🥃</span>
-                </div>
-                <p className="text-xs font-medium text-foreground truncate">{product.name}</p>
-                <p className="text-xs text-muted-foreground">{product.category}</p>
-                <p className="text-sm font-bold text-primary mt-auto pt-1 tabular-nums">
-                  R{getEffectivePrice(product.basePrice, product.id).toFixed(2)}
-                </p>
-              </motion.button>
+                product={product}
+                stock={product.stock ?? 0}
+                price={getEffectivePrice(product.basePrice, product.id)}
+                onSelect={() => handleSelectProduct(product)}
+              />
             ))}
           </div>
         </ScrollArea>

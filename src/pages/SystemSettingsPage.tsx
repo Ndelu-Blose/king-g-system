@@ -18,7 +18,7 @@ interface SystemSettings {
 
 const defaults: SystemSettings = {
   taxRate: 15,
-  businessName: 'King G Lifestyle & Lounge',
+  businessName: 'King G Lifestyle Lounge',
   receiptFooter: 'Thank you for your visit.',
   lowStockThreshold: 5,
 };

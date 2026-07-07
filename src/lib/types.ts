@@ -23,6 +23,7 @@ export interface Product {
   category: string;
   basePrice: number;
   costPrice: number;
+  sizeMl?: number;
   image?: string;
 }
 

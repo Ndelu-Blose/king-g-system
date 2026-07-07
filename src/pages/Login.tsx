@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { requestPasswordReset } from '@/lib/auth-api';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function Login() {
@@ -62,43 +62,10 @@ export default function Login() {
                     <h1 className="font-display text-4xl lg:text-5xl font-bold tracking-wide text-foreground">
                       KING G
                     </h1>
-                    <p className="text-muted-foreground mt-1 text-sm lg:text-base">Lifestyle & Lounge</p>
+                    <p className="text-muted-foreground mt-1 text-sm lg:text-base">Lifestyle Lounge</p>
                   </div>
                 </div>
 
-                <div className="mt-5 flex flex-wrap items-center gap-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-secondary/40 px-3 py-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_18px_hsl(141_70%_50%/0.45)]" />
-                    <span className="text-xs text-foreground/80">System online</span>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full bg-secondary/30 border border-border/50 px-3 py-1">
-                    <LockKeyhole className="w-3.5 h-3.5 text-primary" />
-                    <span className="text-xs text-foreground/80">Secure role-based access</span>
-                  </div>
-                </div>
-
-                <p className="mt-5 text-sm lg:text-base text-muted-foreground max-w-md">
-                  Secure access to the enterprise operations platform.
-                </p>
-
-                <div className="mt-8 space-y-3">
-                  <div className="flex items-start gap-3">
-                    <ShieldCheck className="w-5 h-5 text-primary mt-0.5" />
-                    <div className="text-sm text-foreground/80">
-                      Role-based access controls for managers, cashiers, and owners.
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <Sparkles className="w-5 h-5 text-primary mt-0.5" />
-                    <div className="text-sm text-foreground/80">
-                      A polished lounge-to-POS workflow, built for fast daily operations.
-                    </div>
-                  </div>
-                </div>
-
-                <p className="mt-10 text-xs text-muted-foreground">
-                  Authorized access only.
-                </p>
               </div>
             </div>
           </motion.div>
@@ -197,9 +164,6 @@ export default function Login() {
                 </button>
               </form>
 
-              <p className="mt-6 text-xs text-muted-foreground">
-                Secure role-based access for King G operations.
-              </p>
             </div>
           </motion.div>
         </div>

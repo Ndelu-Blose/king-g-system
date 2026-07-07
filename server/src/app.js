@@ -53,6 +53,78 @@ export function createApp() {
     }
   });
 
+  app.post("/api/products/seed-beverages", authMiddleware, async (req, res) => {
+    if (!req.user || !["owner", "senior_manager"].includes(req.user.role)) {
+      return res.status(403).json({ error: "Only owner or senior manager can seed products" });
+    }
+    try {
+      const result = await pos.seedBeverageCatalog();
+      res.json({ ok: true, ...result });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: e?.message || "Failed to seed beverage catalog" });
+    }
+  });
+
+  function canManageProducts(user) {
+    return user && ["owner", "senior_manager"].includes(user.role);
+  }
+
+  app.post("/api/products", authMiddleware, async (req, res) => {
+    if (!canManageProducts(req.user)) {
+      return res.status(403).json({ error: "Only owner or senior manager can add products" });
+    }
+    try {
+      const product = await pos.createProduct(req.body);
+      res.status(201).json(product);
+    } catch (e) {
+      console.error(e);
+      const msg = e?.message || "Failed to create product";
+      const status = /already exists|required|valid/i.test(msg) ? 400 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+
+  app.put("/api/products/:id", authMiddleware, async (req, res) => {
+    if (!canManageProducts(req.user)) {
+      return res.status(403).json({ error: "Only owner or senior manager can edit products" });
+    }
+    try {
+      const product = await pos.updateProduct(req.params.id, req.body);
+      res.json(product);
+    } catch (e) {
+      console.error(e);
+      const msg = e?.message || "Failed to update product";
+      const status = /not found/i.test(msg) ? 404 : /already|required|valid/i.test(msg) ? 400 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+
+  app.delete("/api/products/:id", authMiddleware, async (req, res) => {
+    if (!canManageProducts(req.user)) {
+      return res.status(403).json({ error: "Only owner or senior manager can delete products" });
+    }
+    try {
+      const result = await pos.deleteProduct(req.params.id);
+      res.json({ ok: true, ...result });
+    } catch (e) {
+      console.error(e);
+      const msg = e?.message || "Failed to delete product";
+      const status = /not found/i.test(msg) ? 404 : 500;
+      res.status(status).json({ error: msg });
+    }
+  });
+
+  app.get("/api/inventory/balances", async (_req, res) => {
+    try {
+      const balances = await pos.getInventoryBalances();
+      res.json(balances);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Failed to load inventory" });
+    }
+  });
+
   app.get("/api/categories", async (_req, res) => {
     try {
       const categories = await pos.getCategories();

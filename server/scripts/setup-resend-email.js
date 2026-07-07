@@ -1,0 +1,96 @@
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+import { randomBytes } from "crypto";
+import { execSync } from "child_process";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+const PROJECT_REF = "tpydiklyduxjkvenfvzd";
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+
+if (!RESEND_API_KEY) {
+  console.error("Missing RESEND_API_KEY in .env");
+  process.exit(1);
+}
+
+function getAccessToken() {
+  if (process.env.SUPABASE_ACCESS_TOKEN?.trim()) {
+    return process.env.SUPABASE_ACCESS_TOKEN.trim();
+  }
+  try {
+    const scriptPath = path.resolve(__dirname, "get-supabase-access-token.ps1");
+    const token = execSync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`,
+      { encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+    ).trim();
+    if (token) return token;
+  } catch {
+    /* fall through */
+  }
+  console.error(
+    "Could not read Supabase access token. Set SUPABASE_ACCESS_TOKEN in .env " +
+      "(create one at https://supabase.com/dashboard/account/tokens) and re-run.",
+  );
+  process.exit(1);
+}
+
+const hookSecret = `v1,whsec_${randomBytes(32).toString("base64")}`;
+const functionUrl = `https://${PROJECT_REF}.supabase.co/functions/v1/auth-send-email`;
+
+async function patchAuthConfig(token) {
+  const body = {
+    external_email_enabled: true,
+    smtp_admin_email: FROM_EMAIL,
+    smtp_host: "smtp.resend.com",
+    smtp_port: "465",
+    smtp_user: "resend",
+    smtp_pass: RESEND_API_KEY,
+    smtp_sender_name: "King G",
+    hook_send_email_enabled: false,
+  };
+
+  const res = await fetch(
+    `https://api.supabase.com/v1/projects/${PROJECT_REF}/config/auth`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Auth config update failed (${res.status}): ${text}`);
+  }
+}
+
+async function main() {
+  console.log("Setting Supabase secrets…");
+  execSync(
+    `npx supabase secrets set RESEND_API_KEY="${RESEND_API_KEY}" RESEND_FROM_EMAIL="${FROM_EMAIL}" SEND_EMAIL_HOOK_SECRET="${hookSecret}" RESEND_FROM_NAME="King G"`,
+    { stdio: "inherit", cwd: path.resolve(__dirname, "../..") },
+  );
+
+  console.log("Deploying auth-send-email edge function…");
+  execSync("npx supabase functions deploy auth-send-email --no-verify-jwt", {
+    stdio: "inherit",
+    cwd: path.resolve(__dirname, "../.."),
+  });
+
+  const token = getAccessToken();
+  console.log("Enabling Resend SMTP for Supabase Auth…");
+  await patchAuthConfig(token);
+
+  console.log("Done. King G auth emails now use Resend SMTP.");
+}
+
+main().catch((e) => {
+  console.error(e?.message || e);
+  process.exit(1);
+});

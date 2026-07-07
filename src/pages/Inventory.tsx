@@ -6,7 +6,7 @@ import { BackButton } from '@/components/BackButton';
 import { motion } from 'framer-motion';
 
 export default function Inventory() {
-  const { inventory } = useInventory();
+  const { inventory, loading } = useInventory();
   const [search, setSearch] = useState('');
   const location = useLocation();
   const path = location.pathname;
@@ -135,7 +135,22 @@ export default function Inventory() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((item, i) => {
+            {loading && (
+              <tr>
+                <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                  Loading inventory…
+                </td>
+              </tr>
+            )}
+            {!loading && filtered.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                  No products in inventory yet.
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              filtered.map((item, i) => {
               const isLow = item.loungeQty < lowStockThreshold;
               return (
                 <motion.tr

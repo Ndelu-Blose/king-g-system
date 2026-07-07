@@ -24,7 +24,7 @@ interface CartContextValue {
     barcode: string,
     options?: { allowZeroStock?: boolean }
   ) => Promise<{ success: true; product: ProductWithStock } | { success: false; reason: 'not_found' | 'out_of_stock' }>;
-  addProduct: (product: Product | ProductWithStock, qty?: number) => void;
+  addProduct: (product: Product | ProductWithStock, qty?: number) => boolean;
   updateQty: (productId: string, delta: number) => void;
   removeItem: (productId: string) => void;
   clearCart: () => void;
@@ -98,6 +98,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const addProduct = useCallback((product: Product | ProductWithStock, qty = 1) => {
+    const stock = product.stock ?? 0;
+    if (stock <= 0) return false;
+
     const unitPrice = getEffectivePrice(product.basePrice, product.id);
     setCart(prev => {
       const existing = prev.find(c => c.product.id === product.id);
@@ -119,6 +122,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
     setLastScanned({ name: product.name, qty, unitPrice });
     refocusScan();
+    return true;
   }, [refocusScan, getEffectivePrice]);
 
   const updateQty = useCallback((productId: string, delta: number) => {

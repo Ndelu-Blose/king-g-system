@@ -11,7 +11,6 @@ export default function AppLayout() {
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (!user) return <Navigate to="/login" replace />;
 
-  // Keep existing cashier guard behavior, then apply full permission route guard for all roles.
   if (user.role === 'cashier' && !isCashierAllowedPath(pathname)) {
     return <Navigate to="/pos" replace />;
   }
