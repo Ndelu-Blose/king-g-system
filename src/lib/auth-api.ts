@@ -158,15 +158,36 @@ async function loginWithApiFallback(email: string, password: string): Promise<Lo
   }
 }
 
-/** Send Supabase password-reset email (owner can also reset from Supabase dashboard). */
+/** Send password-reset email via API (Resend) with Supabase client fallback. */
 export async function requestPasswordReset(email: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!isSupabaseConfigured) {
-    return { ok: false, error: 'Password reset requires Supabase. Contact an owner to change your password.' };
-  }
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return { ok: false, error: 'Enter your email address first.' };
+
   const redirectTo = `${window.location.origin}/login`;
-  const { error } = await getSupabase().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo,
-  });
+  const apiBase = getApiBase();
+
+  if (apiBase || usesLocalApiProxy()) {
+    try {
+      const res = await fetch(`${apiBase}/api/auth/request-password-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: normalized, redirectTo }),
+      });
+      if (res.ok) return { ok: true };
+      const body = await res.json().catch(() => ({}));
+      if (res.status !== 503) {
+        return { ok: false, error: typeof body?.error === 'string' ? body.error : 'Failed to send reset email.' };
+      }
+    } catch {
+      /* fall through to Supabase */
+    }
+  }
+
+  if (!isSupabaseConfigured) {
+    return { ok: false, error: 'Password reset requires the API or Supabase. Contact an owner to change your password.' };
+  }
+
+  const { error } = await getSupabase().auth.resetPasswordForEmail(normalized, { redirectTo });
   if (error) return { ok: false, error: mapAuthError(error.message) };
   return { ok: true };
 }

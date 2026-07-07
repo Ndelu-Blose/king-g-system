@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 
-import { loginHandler, meHandler, authMiddleware } from "../auth.js";
+import { loginHandler, meHandler, requestPasswordResetHandler, authMiddleware } from "../auth.js";
 import { requirePermission, requireAuth } from "../permissions.js";
 import { listReports } from "./services/reports.service.js";
 import * as pos from "./services/pos.service.js";
@@ -15,6 +15,7 @@ export function createApp() {
 
   // --- Auth (no auth middleware) ---
   app.post("/api/auth/login", loginHandler);
+  app.post("/api/auth/request-password-reset", requestPasswordResetHandler);
   app.get("/api/auth/me", authMiddleware, meHandler);
 
   // --- Products (Supabase) ---

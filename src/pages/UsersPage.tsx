@@ -321,7 +321,7 @@ export default function UsersPage() {
           <DialogHeader>
             <DialogTitle>Add user</DialogTitle>
             <DialogDescription>
-              Creates a Supabase login and a King G profile. Share the password securely, or use Forgot password on the login page later.
+              Creates a Supabase login and a King G profile. A welcome email with a set-password link is sent via Resend when the API is running.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">

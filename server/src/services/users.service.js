@@ -2,6 +2,11 @@ import { getSupabaseAdmin } from "../lib/supabase.js";
 import { hashPassword } from "../lib/passwords.js";
 import { isSupabaseAuthEnabled } from "../lib/auth-supabase.js";
 import { hasAuthUserIdColumn } from "../lib/auth-schema.js";
+import {
+  isResendConfigured,
+  sendPasswordChangedEmail,
+  sendWelcomeEmail,
+} from "./email.service.js";
 
 const VALID_ROLES = new Set(["cashier", "manager", "senior_manager", "owner"]);
 
@@ -152,12 +157,25 @@ export async function createUser({ name, email, role, password }) {
     }
     throw error;
   }
-  return mapUser(data);
+
+  const created = mapUser(data);
+  if (authUserId && isResendConfigured()) {
+    try {
+      await sendWelcomeEmail({
+        email: trimmedEmail,
+        name: trimmedName,
+        role: trimmedRole,
+      });
+    } catch (emailError) {
+      console.error("Welcome email failed:", emailError?.message || emailError);
+    }
+  }
+  return created;
 }
 
 export async function updateUser(id, { name, email, role, active }) {
   const client = await supabase();
-  const current = await getUserById(id);
+  const current = await getUserRecordById(id);
   if (!current) throw new Error("User not found");
 
   const patch = {};
@@ -182,7 +200,31 @@ export async function updateUser(id, { name, email, role, active }) {
   }
   if (active !== undefined) patch.active = !!active;
 
-  if (Object.keys(patch).length === 0) return current;
+  if (Object.keys(patch).length === 0) {
+    return mapUser({
+      id: current.id,
+      name: current.name,
+      email: current.email,
+      role: current.role,
+      active: current.active,
+      auth_user_id: current.authUserId,
+    });
+  }
+
+  if (
+    patch.email &&
+    patch.email !== current.email.toLowerCase() &&
+    current.authUserId &&
+    (await hasAuthUserIdColumn()) &&
+    isSupabaseAuthEnabled()
+  ) {
+    const { error: authEmailError } = await client.auth.admin.updateUserById(current.authUserId, {
+      email: patch.email,
+    });
+    if (authEmailError) {
+      throw new Error(authEmailError.message || "Failed to update auth email");
+    }
+  }
 
   const { data, error } = await client
     .from("users")
@@ -227,6 +269,14 @@ export async function updateUserPassword(id, password) {
       password: pwd,
     });
     if (authError) throw new Error(authError.message || "Failed to update auth password");
+
+    if (isResendConfigured()) {
+      try {
+        await sendPasswordChangedEmail({ email: current.email, name: current.name });
+      } catch (emailError) {
+        console.error("Password-changed email failed:", emailError?.message || emailError);
+      }
+    }
     return { ok: true };
   }
 

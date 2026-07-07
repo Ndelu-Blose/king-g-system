@@ -6,6 +6,7 @@ import { credentialsValid } from "./src/lib/auth-credentials.js";
 import { resolveBearerUser } from "./src/lib/auth-resolve.js";
 import { legacyTokenTtlSec, signLegacyToken } from "./src/lib/auth-legacy.js";
 import { isSupabaseAuthEnabled, signInWithSupabaseAuth } from "./src/lib/auth-supabase.js";
+import { isResendConfigured, sendPasswordResetEmail } from "./src/services/email.service.js";
 
 /**
  * GET /api/auth/me — current user from Bearer token.
@@ -82,6 +83,39 @@ export async function loginHandler(req, res) {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: "Login failed" });
+  }
+}
+
+/**
+ * POST /api/auth/request-password-reset — send reset email via Resend for King G users.
+ * Always returns ok when email format is valid (do not reveal whether account exists).
+ */
+export async function requestPasswordResetHandler(req, res) {
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const redirectTo = String(req.body?.redirectTo || "").trim();
+
+  if (!email || !email.includes("@")) {
+    return res.status(400).json({ error: "Valid email is required" });
+  }
+
+  if (!isResendConfigured()) {
+    return res.status(503).json({
+      error: "Password reset email is not configured on the server. Use Forgot password via Supabase or contact an owner.",
+    });
+  }
+
+  try {
+    const profile = await getUserByEmail(email);
+    if (profile?.authUserId && profile.active !== false) {
+      await sendPasswordResetEmail(email, {
+        redirectTo: redirectTo || undefined,
+        name: profile.name,
+      });
+    }
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error("Password reset email failed:", e);
+    return res.status(500).json({ error: "Failed to send password reset email" });
   }
 }
 
