@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { KeyRound, MoreHorizontal, Plus, Trash2, UserCheck, UserX } from 'lucide-react';
+import { KeyRound, Mail, MoreHorizontal, Plus, Trash2, UserCheck, UserX } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,6 +46,7 @@ import {
   createUser,
   deleteUser,
   fetchUsers,
+  sendUserWelcomeEmail,
   updateUser,
 } from '@/lib/users-api';
 
@@ -108,13 +109,29 @@ export default function UsersPage() {
       return;
     }
     try {
-      await createUser({ name, email, role: addForm.role, password });
-      toast.success(`"${name}" added.`);
+      const created = await createUser({ name, email, role: addForm.role, password });
+      if (created.emailSent) {
+        toast.success(`"${name}" added. Welcome email sent to ${email}.`);
+      } else {
+        toast.warning(
+          `"${name}" added, but welcome email was not sent. ${created.emailError || 'Check API email settings.'}`,
+          { duration: 8000 },
+        );
+      }
       setAddOpen(false);
       setAddForm(emptyForm);
       await loadUsers();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add user');
+    }
+  };
+
+  const handleSendWelcome = async (target: ManagedUser) => {
+    try {
+      await sendUserWelcomeEmail(target.id);
+      toast.success(`Welcome email sent to ${target.email}.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to send welcome email');
     }
   };
 
@@ -283,6 +300,10 @@ export default function UsersPage() {
                           <KeyRound className="w-4 h-4 mr-2" />
                           Change password
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleSendWelcome(u)}>
+                          <Mail className="w-4 h-4 mr-2" />
+                          Send welcome email
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {u.active ? (
                           <DropdownMenuItem
@@ -321,7 +342,7 @@ export default function UsersPage() {
           <DialogHeader>
             <DialogTitle>Add user</DialogTitle>
             <DialogDescription>
-              Creates a Supabase login and a King G profile. A welcome email with a set-password link is sent via Resend when the API is running.
+              Creates a Supabase login and a King G profile. A welcome email with a set-password link is sent when the API has Resend configured (see king-g-api env on Vercel).
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">

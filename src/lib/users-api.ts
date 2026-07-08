@@ -110,22 +110,30 @@ export async function fetchUsers(): Promise<ManagedUser[]> {
   return apiGet<ManagedUser[]>('/api/users');
 }
 
+export type CreateUserResult = ManagedUser & {
+  authUserId?: string | null;
+  emailSent?: boolean;
+  emailError?: string | null;
+};
+
 export async function createUser(payload: {
   name: string;
   email: string;
   role: UserRole;
   password: string;
-}): Promise<ManagedUser> {
-  const created = await usersWritePost<ManagedUser & { authUserId?: string | null }>(
-    '/api/users',
-    payload,
-  );
-  if (USE_DIRECT_SUPABASE && !created.authUserId) {
+}): Promise<CreateUserResult> {
+  const created = await usersWritePost<CreateUserResult>('/api/users', payload);
+  if (!created.authUserId) {
     throw new Error(
-      'User profile saved, but login was not created. Run "npm run api" in a second terminal and add the user again.',
+      created.emailError ||
+        'User profile saved, but login was not created. Add SUPABASE_SERVICE_ROLE_KEY on king-g-api (Vercel) and try again.',
     );
   }
   return created;
+}
+
+export async function sendUserWelcomeEmail(id: string): Promise<void> {
+  await usersWritePost(`/api/users/${encodeURIComponent(id)}/send-welcome`, {});
 }
 
 export async function updateUser(

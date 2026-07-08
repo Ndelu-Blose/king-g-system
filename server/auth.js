@@ -1,7 +1,7 @@
 /**
  * Auth: Supabase Auth (production) + legacy JWT fallback (dev / migration).
  */
-import { getUserByEmail } from "./src/services/users.service.js";
+import { getUserByEmail, resolvePasswordResetRecipient } from "./src/services/users.service.js";
 import { credentialsValid } from "./src/lib/auth-credentials.js";
 import { resolveBearerUser } from "./src/lib/auth-resolve.js";
 import { legacyTokenTtlSec, signLegacyToken } from "./src/lib/auth-legacy.js";
@@ -105,11 +105,11 @@ export async function requestPasswordResetHandler(req, res) {
   }
 
   try {
-    const profile = await getUserByEmail(email);
-    if (profile?.authUserId && profile.active !== false) {
-      await sendPasswordResetEmail(email, {
+    const recipient = await resolvePasswordResetRecipient(email);
+    if (recipient) {
+      await sendPasswordResetEmail(recipient.email, {
         redirectTo: redirectTo || undefined,
-        name: profile.name,
+        name: recipient.name,
       });
     }
     return res.json({ ok: true });

@@ -4,6 +4,7 @@ import cors from "cors";
 import { loginHandler, meHandler, requestPasswordResetHandler, authMiddleware } from "../auth.js";
 import { requirePermission, requireAuth } from "../permissions.js";
 import { listReports } from "./services/reports.service.js";
+import { getServerCapabilities } from "./lib/server-capabilities.js";
 import * as pos from "./services/pos.service.js";
 import * as users from "./services/users.service.js";
 import * as receiving from "./services/receiving.service.js";
@@ -445,6 +446,18 @@ export function createApp() {
     }
   });
 
+  app.post("/api/users/:id/send-welcome", authMiddleware, requirePermission("admin.users"), async (req, res) => {
+    const { id } = req.params;
+    try {
+      const result = await users.sendUserWelcomeEmail(id);
+      res.json(result);
+    } catch (e) {
+      console.error(e);
+      const msg = e instanceof Error ? e.message : "Failed to send welcome email";
+      res.status(400).json({ error: msg });
+    }
+  });
+
   app.delete("/api/users/:id", authMiddleware, requirePermission("admin.users"), async (req, res) => {
     const { id } = req.params;
     if (req.user?.id === id) {
@@ -641,8 +654,8 @@ export function createApp() {
   });
 
   // Health
-  app.get("/health", (_req, res) => res.json({ ok: true }));
-  app.get("/api/health", (_req, res) => res.json({ ok: true }));
+  app.get("/health", (_req, res) => res.json({ ok: true, ...getServerCapabilities() }));
+  app.get("/api/health", (_req, res) => res.json({ ok: true, ...getServerCapabilities() }));
 
   // --- Reports (Supabase-backed; optional during migration) ---
   app.get("/api/reports", async (req, res) => {

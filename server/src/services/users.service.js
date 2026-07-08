@@ -159,18 +159,74 @@ export async function createUser({ name, email, role, password }) {
   }
 
   const created = mapUser(data);
-  if (authUserId && isResendConfigured()) {
+  let emailSent = false;
+  let emailError = null;
+
+  if (!authUserId && isSupabaseAuthEnabled()) {
+    emailError = "Login account was not created. Set SUPABASE_SERVICE_ROLE_KEY on the API server.";
+  } else if (!isResendConfigured()) {
+    emailError =
+      "Welcome email not sent: RESEND_API_KEY is missing on the API server (king-g-api on Vercel).";
+  } else if (authUserId) {
     try {
       await sendWelcomeEmail({
         email: trimmedEmail,
         name: trimmedName,
         role: trimmedRole,
       });
-    } catch (emailError) {
-      console.error("Welcome email failed:", emailError?.message || emailError);
+      emailSent = true;
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : String(err);
+      console.error("Welcome email failed:", emailError);
     }
   }
-  return created;
+
+  return { ...created, emailSent, emailError };
+}
+
+export async function sendUserWelcomeEmail(id) {
+  const current = await getUserRecordById(id);
+  if (!current) throw new Error("User not found");
+  if (!current.authUserId) {
+    throw new Error(
+      "This user has no Supabase login linked. Re-add them from User Management or run repair:auth-users.",
+    );
+  }
+  if (!isResendConfigured()) {
+    throw new Error("RESEND_API_KEY is not configured on the API server.");
+  }
+
+  await sendWelcomeEmail({
+    email: current.email,
+    name: current.name,
+    role: current.role,
+  });
+  return { ok: true, emailSent: true };
+}
+
+/** Find a King G or Supabase Auth user eligible for password-reset email. */
+export async function resolvePasswordResetRecipient(email) {
+  const needle = String(email || "").trim().toLowerCase();
+  if (!needle || !needle.includes("@")) return null;
+
+  const profile = await getUserByEmail(needle);
+  if (profile?.active === false) return null;
+  if (profile?.authUserId) {
+    return { email: needle, name: profile.name || needle };
+  }
+
+  if (!isSupabaseAuthEnabled()) return null;
+  const client = await supabase();
+  const { data, error } = await client.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  if (error) return null;
+
+  const authUser = data?.users?.find((u) => u.email?.toLowerCase() === needle);
+  if (!authUser) return null;
+
+  return {
+    email: needle,
+    name: authUser.user_metadata?.display_name || profile?.name || needle,
+  };
 }
 
 export async function updateUser(id, { name, email, role, active }) {

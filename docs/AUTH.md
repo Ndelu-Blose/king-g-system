@@ -44,6 +44,11 @@ Users & Roles → deactivate (or delete). Deleting removes both the Auth user an
 | `SUPABASE_SERVICE_ROLE_KEY` | Server DB + Auth admin (never expose to browser) |
 | `SUPABASE_ANON_KEY` | Server-side Auth sign-in (same as frontend anon key) |
 | `JWT_SECRET` | Legacy dev tokens only; keep set until all users are on Auth |
+| `RESEND_API_KEY` | Welcome + password-reset emails from User Management |
+| `RESEND_FROM_EMAIL` | `noreply@kinggeelfs.co.za` (verified in Resend) |
+| `APP_URL` | `https://king-g-system.vercel.app` (links inside emails) |
+
+Check production: `GET https://king-g-api.vercel.app/api/health` should show `"userEmailsReady": true`. If `resend` is false, add `RESEND_API_KEY` on Vercel and redeploy.
 
 **Frontend (`king-g-system` on Vercel)**
 
