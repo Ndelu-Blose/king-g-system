@@ -10,6 +10,10 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 const PROJECT_REF = "tpydiklyduxjkvenfvzd";
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+const PRODUCTION_APP_URL = (process.env.APP_URL || "https://king-g-system.vercel.app").replace(
+  /\/$/,
+  "",
+);
 
 if (!RESEND_API_KEY) {
   console.error("Missing RESEND_API_KEY in .env");
@@ -41,7 +45,17 @@ const hookSecret = `v1,whsec_${randomBytes(32).toString("base64")}`;
 const functionUrl = `https://${PROJECT_REF}.supabase.co/functions/v1/auth-send-email`;
 
 async function patchAuthConfig(token) {
+  const allowList = [
+    `${PRODUCTION_APP_URL}`,
+    `${PRODUCTION_APP_URL}/**`,
+    `${PRODUCTION_APP_URL}/login`,
+    "http://localhost:8080/**",
+    "http://localhost:8081/**",
+  ].join(",");
+
   const body = {
+    site_url: PRODUCTION_APP_URL,
+    uri_allow_list: allowList,
     external_email_enabled: true,
     smtp_admin_email: FROM_EMAIL,
     smtp_host: "smtp.resend.com",

@@ -18,6 +18,7 @@
     "seed:beverages": "node server/scripts/seed-beverage-stock.js",
     "import:november-prices": "node server/scripts/import-november-prices.js",
     "setup:resend-email": "node server/scripts/setup-resend-email.js",
+    "setup:auth-urls": "node server/scripts/setup-auth-urls.js",
     "repair:auth-users": "node server/scripts/repair-auth-users.js",
     "generate:beverages": "node server/scripts/generate-beverage-stock.js && node server/scripts/generate-beverage-sql.js"
   },

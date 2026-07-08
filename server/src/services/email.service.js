@@ -9,13 +9,32 @@ const APP_URL = (process.env.APP_URL || process.env.VITE_APP_URL || "http://loca
   "",
 );
 
+const LOCAL_HOST_RE = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
 export function isResendConfigured() {
   return Boolean(RESEND_API_KEY);
 }
 
+export function isLocalAppHost(hostname) {
+  return LOCAL_HOST_RE.test(String(hostname || "").trim());
+}
+
+/** Prefer production APP_URL when redirect target is localhost (e.g. dev machine triggered reset). */
 export function getAppLoginUrl(redirectTo) {
   const target = String(redirectTo || "").trim();
-  if (target && /^https?:\/\//i.test(target)) return target;
+  if (target && /^https?:\/\//i.test(target)) {
+    try {
+      const url = new URL(target);
+      const appUrl = new URL(APP_URL);
+      const appIsProduction = !isLocalAppHost(appUrl.hostname);
+      if (appIsProduction && isLocalAppHost(url.hostname)) {
+        return `${APP_URL}/login`;
+      }
+      return target;
+    } catch {
+      /* fall through */
+    }
+  }
   return `${APP_URL}/login`;
 }
 

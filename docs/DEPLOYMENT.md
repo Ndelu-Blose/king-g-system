@@ -9,6 +9,8 @@
 - [ ] Framework: **Express**
 - [ ] Output Directory: **`dist`**
 - [ ] Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `JWT_SECRET`
+- [ ] Env: `RESEND_API_KEY`, `RESEND_FROM_EMAIL=noreply@kinggeelfs.co.za`
+- [ ] Env: `APP_URL` = `https://king-g-system.vercel.app` (password-reset email links)
 - [ ] Deploy succeeds; `GET /api/health` returns `{"ok":true}`
 
 ### Checklist — `king-g-system`
@@ -27,6 +29,16 @@
 2. Sign in.
 3. Confirm: `POST https://king-g-api.vercel.app/api/auth/login`
 4. **200** + `token` = success; **401** = bad credentials; **405** = frontend still missing `VITE_API_URL`.
+
+### Password-reset email links
+
+Supabase Auth must use your **production** URL, not `localhost`:
+
+```bash
+npm run setup:auth-urls
+```
+
+This sets `site_url` to `https://king-g-system.vercel.app` and allows redirect URLs for production + local dev. After changing URLs, request a **new** reset email — old links still point at the previous `site_url`.
 
 ## Docker (local / staging)
 
