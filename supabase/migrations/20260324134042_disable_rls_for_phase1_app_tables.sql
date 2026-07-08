@@ -1,0 +1,11 @@
+alter table if exists public.products disable row level security;
+alter table if exists public.inventory disable row level security;
+alter table if exists public.sales disable row level security;
+alter table if exists public.sale_items disable row level security;
+alter table if exists public.audit_log disable row level security;
+alter table if exists public.help_requests disable row level security;
+alter table if exists public.users disable row level security;
+alter table if exists public.venue_settings disable row level security;
+alter table if exists public.discrepancy_cases disable row level security;
+alter table if exists public.incidents disable row level security;
+alter table if exists public.incident_events disable row level security;;
