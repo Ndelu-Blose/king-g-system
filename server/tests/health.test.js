@@ -10,8 +10,10 @@ describe("GET /api/health", () => {
       resend: expect.any(Boolean),
       supabaseAdmin: expect.any(Boolean),
       userEmailsReady: expect.any(Boolean),
+      kingGProjectConfigured: expect.any(Boolean),
     });
     expect(Object.prototype.hasOwnProperty.call(res.body, "appUrl")).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(res.body, "supabaseProjectRef")).toBe(true);
     expect(res.body.appUrl === null || typeof res.body.appUrl === "string").toBe(true);
   });
 });

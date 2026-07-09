@@ -10,14 +10,28 @@ function hasSupabaseUrl() {
   return Boolean(url && !url.includes("your-project"));
 }
 
+function getSupabaseProjectRef() {
+  const url = process.env.SUPABASE_URL?.trim() || "";
+  try {
+    return new URL(url).hostname.split(".")[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+const KING_G_PROJECT_REF = "tpydiklyduxjkvenfvzd";
+
 /** Non-secret capability flags for /api/health diagnostics. */
 export function getServerCapabilities() {
   const resend = isResendConfigured();
   const supabaseAdmin = hasSupabaseUrl() && hasServiceRole();
+  const supabaseProjectRef = getSupabaseProjectRef();
   return {
     resend,
     supabaseAdmin,
     appUrl: (process.env.APP_URL || "").trim() || null,
+    supabaseProjectRef,
+    kingGProjectConfigured: supabaseProjectRef === KING_G_PROJECT_REF,
     userEmailsReady: resend && supabaseAdmin,
   };
 }

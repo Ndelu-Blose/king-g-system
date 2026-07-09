@@ -8,10 +8,11 @@
 - [ ] Root Directory: **`server`**
 - [ ] Framework: **Express**
 - [ ] Output Directory: **`dist`**
-- [ ] Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `JWT_SECRET`
+- [ ] Env: `SUPABASE_URL` = `https://tpydiklyduxjkvenfvzd.supabase.co` (**King G only** — not Physio-Med `suammivasszztkukzjeh`)
+- [ ] Env: `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_ANON_KEY`, `JWT_SECRET`
 - [ ] Env: `RESEND_API_KEY`, `RESEND_FROM_EMAIL=noreply@kinggeelfs.co.za`
 - [ ] Env: `APP_URL` = `https://king-g-system.vercel.app` (password-reset email links)
-- [ ] Deploy succeeds; `GET /api/health` returns `{"ok":true}`
+- [ ] Deploy succeeds; `GET /api/health` returns `{"ok":true,"kingGProjectConfigured":true,"userEmailsReady":true}`
 
 ### Checklist — `king-g-system`
 
