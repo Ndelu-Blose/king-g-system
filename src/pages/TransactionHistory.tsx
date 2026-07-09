@@ -33,10 +33,7 @@ export default function TransactionHistory() {
       </div>
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">Transaction History</h1>
-        <p className="text-sm text-muted-foreground">
-          All sales with cashier attribution
-          {apiTransactions && <span className="ml-2 text-primary">Live from database</span>}
-        </p>
+        <p className="text-sm text-muted-foreground">All sales with cashier attribution</p>
       </div>
 
       <div className="glass-card overflow-hidden">

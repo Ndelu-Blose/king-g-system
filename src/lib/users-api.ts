@@ -124,10 +124,7 @@ export async function createUser(payload: {
 }): Promise<CreateUserResult> {
   const created = await usersWritePost<CreateUserResult>('/api/users', payload);
   if (!created.authUserId) {
-    throw new Error(
-      created.emailError ||
-        'User profile saved, but login was not created. Add SUPABASE_SERVICE_ROLE_KEY on king-g-api (Vercel) and try again.',
-    );
+    throw new Error('Account was created, but sign-in could not be set up. Contact an owner for help.');
   }
   return created;
 }

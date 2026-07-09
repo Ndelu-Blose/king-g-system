@@ -18,6 +18,12 @@ function mapAuthError(message: string): string {
   if (/email not confirmed/i.test(message)) {
     return 'Please confirm your email before signing in.';
   }
+  if (/signed in.*profile/i.test(message) || /no active.*profile/i.test(message)) {
+    return 'Your account is not set up yet. Ask an owner to add you in User Management.';
+  }
+  if (/supabase|auth|jwt|token|api key|resend|vercel|env/i.test(message)) {
+    return 'Sign-in failed. Check your email and password, or contact an owner.';
+  }
   return message || 'Sign-in failed.';
 }
 
@@ -77,8 +83,7 @@ async function loginWithSupabase(email: string, password: string): Promise<Login
     await getSupabase().auth.signOut();
     return {
       ok: false,
-      error:
-        'Signed in to Supabase, but no active King G profile found. Ask an owner to add your role in User Management.',
+      error: 'Your account is not set up yet. Ask an owner to add you in User Management.',
     };
   }
   return { ok: true, user, token };
@@ -96,7 +101,7 @@ export async function loginWithApi(email: string, password: string): Promise<Log
         if (apiResult.ok) return apiResult;
         const mergedMessage =
           apiResult.error && apiResult.error !== supabaseResult.error
-            ? `${supabaseResult.error} ${apiResult.error}`
+            ? apiResult.error
             : supabaseResult.error;
         return { ok: false, error: mergedMessage };
       } catch (e) {
@@ -143,18 +148,18 @@ async function loginWithApiFallback(email: string, password: string): Promise<Lo
       return {
         ok: false,
         error:
-          serverMessage ||
-          (res.status === 401 ? 'Invalid email or password.' : `Login failed (${res.status}).`),
+          mapAuthError(serverMessage) ||
+          (res.status === 401 ? 'Invalid email or password.' : 'Sign-in failed. Try again later.'),
       };
     }
     if (!data.token || !data.user) {
-      return { ok: false, error: 'Invalid response from server.' };
+      return { ok: false, error: 'Sign-in failed. Try again later.' };
     }
     return { ok: true, user: data.user, token: data.token };
   } catch {
     return {
       ok: false,
-      error: 'Cannot reach the API. Start the server (cd server && npm start) and refresh this page.',
+      error: 'Unable to sign in right now. Try again later or contact an owner.',
     };
   }
 }
@@ -185,7 +190,7 @@ export async function requestPasswordReset(email: string): Promise<{ ok: true } 
   }
 
   if (!isSupabaseConfigured) {
-    return { ok: false, error: 'Password reset requires the API or Supabase. Contact an owner to change your password.' };
+    return { ok: false, error: 'Password reset is not available. Contact an owner for help.' };
   }
 
   const { error } = await getSupabase().auth.resetPasswordForEmail(normalized, { redirectTo });

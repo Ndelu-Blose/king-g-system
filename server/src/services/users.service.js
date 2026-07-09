@@ -167,10 +167,9 @@ export async function createUser({ name, email, role, password }) {
   let emailError = null;
 
   if (!authUserId && isSupabaseAuthEnabled()) {
-    emailError = "Login account was not created. Set SUPABASE_SERVICE_ROLE_KEY on the API server.";
+    emailError = "Sign-in could not be set up for this user.";
   } else if (!isResendConfigured()) {
-    emailError =
-      "Welcome email not sent: RESEND_API_KEY is missing on the API server (king-g-api on Vercel).";
+    emailError = "Welcome email could not be sent.";
   } else if (authUserId) {
     try {
       await sendWelcomeEmail({
@@ -193,11 +192,11 @@ export async function sendUserWelcomeEmail(id) {
   if (!current) throw new Error("User not found");
   if (!current.authUserId) {
     throw new Error(
-      "This user has no Supabase login linked. Re-add them from User Management or run repair:auth-users.",
+      "This user cannot receive a welcome email. Remove and re-add them from User Management.",
     );
   }
   if (!isResendConfigured()) {
-    throw new Error("RESEND_API_KEY is not configured on the API server.");
+    throw new Error("Welcome email could not be sent. Try again later.");
   }
 
   await sendWelcomeEmail({

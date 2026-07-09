@@ -71,7 +71,7 @@ export async function signInWithSupabaseAuth(email, password) {
   if (error || !data.session?.access_token) {
     return {
       ok: false,
-      error: error?.message || "Supabase sign-in failed",
+      error: error?.message || "Sign-in failed",
     };
   }
 
@@ -79,7 +79,7 @@ export async function signInWithSupabaseAuth(email, password) {
   if (!profile) {
     return {
       ok: false,
-      error: "Signed in to Supabase, but no active King G profile found",
+      error: "Your account is not set up yet. Ask an owner to add you in User Management.",
     };
   }
 

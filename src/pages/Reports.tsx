@@ -11,7 +11,7 @@ export default function Reports() {
       </div>
       <div>
         <h1 className="font-display text-2xl font-bold text-foreground">Reports & Analytics</h1>
-        <p className="text-sm text-muted-foreground">Comprehensive business intelligence</p>
+        <p className="text-sm text-muted-foreground">Sales and inventory reports</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

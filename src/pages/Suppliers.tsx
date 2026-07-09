@@ -117,7 +117,6 @@ export default function Suppliers() {
                 type="email"
                 value={newSupplier.contact}
                 onChange={(e) => setNewSupplier((p) => ({ ...p, contact: e.target.value }))}
-                placeholder="contact@supplier.co.za"
               />
             </div>
             <div className="grid gap-2">

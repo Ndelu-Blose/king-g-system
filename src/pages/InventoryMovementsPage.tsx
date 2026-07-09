@@ -40,9 +40,7 @@ export default function InventoryMovementsPage() {
             <ArrowLeftRight className="h-6 w-6 text-primary" />
             Inventory Movements
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            SALE, TRANSFER, ADJUSTMENT, DAMAGE, RECEIPT.
-          </p>
+          <p className="text-sm text-muted-foreground mt-1">Stock movements by type.</p>
         </div>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[180px]">

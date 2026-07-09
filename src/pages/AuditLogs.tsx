@@ -21,7 +21,7 @@ export default function AuditLogs() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">Audit Logs</h1>
-          <p className="text-sm text-muted-foreground">Immutable record of all system activities</p>
+          <p className="text-sm text-muted-foreground">Record of all system activities</p>
         </div>
         <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-sidebar-accent transition-colors">
           <Filter className="w-4 h-4" />

@@ -110,7 +110,6 @@ export default function ResetPassword() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full h-12 px-4 rounded-xl bg-secondary/40 border border-border/70 text-foreground pr-12"
-                  placeholder="At least 6 characters"
                   required
                   minLength={6}
                   autoComplete="new-password"
@@ -135,7 +134,6 @@ export default function ResetPassword() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 className="w-full h-12 px-4 rounded-xl bg-secondary/40 border border-border/70 text-foreground"
-                placeholder="Repeat password"
                 required
                 minLength={6}
                 autoComplete="new-password"

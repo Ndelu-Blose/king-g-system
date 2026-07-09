@@ -92,7 +92,7 @@ export default function PromotionsPage() {
               Happy hour (time-based discount)
             </CardTitle>
             <CardDescription>
-              Configured in Discount Rules. The discount applies only to the items you selected there, and only during this time window.
+              Set the time window and eligible items in Discount Rules.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">

@@ -113,10 +113,7 @@ export default function UsersPage() {
       if (created.emailSent) {
         toast.success(`"${name}" added. Welcome email sent to ${email}.`);
       } else {
-        toast.warning(
-          `"${name}" added, but welcome email was not sent. ${created.emailError || 'Check API email settings.'}`,
-          { duration: 8000 },
-        );
+        toast.warning(`"${name}" added, but the welcome email could not be sent.`, { duration: 8000 });
       }
       setAddOpen(false);
       setAddForm(emptyForm);
@@ -197,9 +194,7 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold text-foreground">User Management</h1>
-          <p className="text-sm text-muted-foreground">
-            Add staff, set roles, and reset passwords. Sign-in uses Supabase Auth; roles stay here in King G.
-          </p>
+          <p className="text-sm text-muted-foreground">Add staff, set roles, and reset passwords.</p>
         </div>
         <Button
           onClick={() => setAddOpen(true)}
@@ -342,7 +337,7 @@ export default function UsersPage() {
           <DialogHeader>
             <DialogTitle>Add user</DialogTitle>
             <DialogDescription>
-              Creates a Supabase login and a King G profile. A welcome email with a set-password link is sent when the API has Resend configured (see king-g-api env on Vercel).
+              They will receive a welcome email with a link to set their password.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
@@ -352,7 +347,6 @@ export default function UsersPage() {
                 id="user-name"
                 value={addForm.name}
                 onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Jane Doe"
               />
             </div>
             <div className="grid gap-2">
@@ -362,7 +356,6 @@ export default function UsersPage() {
                 type="email"
                 value={addForm.email}
                 onChange={(e) => setAddForm((p) => ({ ...p, email: e.target.value }))}
-                placeholder="user@example.com"
               />
             </div>
             <div className="grid gap-2">
@@ -390,7 +383,6 @@ export default function UsersPage() {
                 type="password"
                 value={addForm.password}
                 onChange={(e) => setAddForm((p) => ({ ...p, password: e.target.value }))}
-                placeholder="At least 6 characters"
                 autoComplete="new-password"
               />
             </div>
@@ -429,7 +421,6 @@ export default function UsersPage() {
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="At least 6 characters"
               autoComplete="new-password"
             />
           </div>

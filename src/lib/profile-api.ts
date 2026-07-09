@@ -121,7 +121,7 @@ export async function updateProfile(input: ProfileUpdateInput): Promise<User> {
   }
 
   if (!isSupabaseConfigured) {
-    throw new Error('Profile update requires the API or Supabase.');
+    throw new Error('Unable to update profile right now. Try again later.');
   }
 
   const { data: sessionData } = await getSupabase().auth.getSession();
@@ -158,7 +158,7 @@ export async function changePassword(
   }
 
   if (!isSupabaseConfigured) {
-    throw new Error('Password change requires the API or Supabase.');
+    throw new Error('Unable to change password right now. Try again later.');
   }
 
   await changePasswordViaSupabase(email, currentPassword, newPassword);

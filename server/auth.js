@@ -101,19 +101,14 @@ export async function loginHandler(req, res) {
         if (/email not confirmed/i.test(msg)) {
           return res.status(401).json({
             error: "Please confirm your email before signing in.",
-            hint: "Ask an owner to confirm the user in Supabase Authentication -> Users, or create the user from User Management.",
+            hint: "Ask an owner to confirm your account, or use Forgot password.",
           });
         }
       }
       const profile = await getUserByEmail(String(email).trim());
       if (profile?.authUserId) {
-        const hint =
-          supabaseResult && !supabaseResult.ok
-            ? `Supabase sign-in failed: ${supabaseResult.error}`
-            : "This account uses Supabase sign-in. Check email/password in Authentication -> Users, or use Forgot password on the login page.";
         return res.status(401).json({
-          error: "Invalid credentials",
-          hint,
+          error: "Invalid email or password.",
         });
       }
     }
@@ -156,7 +151,7 @@ export async function requestPasswordResetHandler(req, res) {
 
   if (!isResendConfigured()) {
     return res.status(503).json({
-      error: "Password reset email is not configured on the server. Use Forgot password via Supabase or contact an owner.",
+      error: "Password reset is not available right now. Contact an owner for help.",
     });
   }
 

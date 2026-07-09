@@ -160,7 +160,6 @@ export default function ProfilePage() {
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+27 …"
                   autoComplete="tel"
                 />
               </div>
