@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import { hashPassword } from "../lib/passwords.js";
 import { isSupabaseAuthEnabled, signInWithSupabaseAuth } from "../lib/auth-supabase.js";
+import { isSupabaseAdminEnabled } from "../lib/server-capabilities.js";
 import { hasAuthUserIdColumn } from "../lib/auth-schema.js";
 import { credentialsValid } from "../lib/auth-credentials.js";
 import {
@@ -126,7 +127,25 @@ export async function createUser({ name, email, role, password }) {
 
   const linkAuth = await hasAuthUserIdColumn();
 
-  if (isSupabaseAuthEnabled()) {
+  const adminReady = isSupabaseAdminEnabled();
+  const authSignInReady = isSupabaseAuthEnabled();
+  // #region agent log
+  fetch("http://127.0.0.1:7617/ingest/fe06f2ec-2a83-4b03-b45f-cadf002a9913", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a458c3" },
+    body: JSON.stringify({
+      sessionId: "a458c3",
+      runId: "email-debug",
+      hypothesisId: "H1",
+      location: "users.service.js:createUser",
+      message: "createUser auth capability check",
+      data: { adminReady, authSignInReady, linkAuth },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
+  if (adminReady) {
     const { data: authData, error: authError } = await client.auth.admin.createUser({
       email: trimmedEmail,
       password: pwd,
@@ -166,7 +185,7 @@ export async function createUser({ name, email, role, password }) {
   let emailSent = false;
   let emailError = null;
 
-  if (!authUserId && isSupabaseAuthEnabled()) {
+  if (!authUserId && adminReady) {
     emailError = "Sign-in could not be set up for this user.";
   } else if (!isResendConfigured()) {
     emailError = "Welcome email could not be sent.";
@@ -187,22 +206,105 @@ export async function createUser({ name, email, role, password }) {
   return { ...created, emailSent, emailError };
 }
 
+/** Link a profile missing auth_user_id to Supabase Auth (existing or new account). */
+async function repairUserAuthLink(userId) {
+  if (!(await hasAuthUserIdColumn())) {
+    throw new Error("Sign-in linking is not available");
+  }
+  if (!isSupabaseAdminEnabled()) {
+    throw new Error("Sign-in setup is not available on the server");
+  }
+
+  const client = await supabase();
+  const row = await getUserRecordById(userId);
+  if (!row) throw new Error("User not found");
+  if (row.authUserId) return row;
+
+  const email = row.email.trim().toLowerCase();
+  const tempPassword = `Kg${Date.now().toString(36)}!`;
+
+  const { data: authData, error: authError } = await client.auth.admin.createUser({
+    email,
+    password: tempPassword,
+    email_confirm: true,
+    user_metadata: { display_name: row.name },
+  });
+
+  let authId = authData?.user?.id ?? null;
+  if (authError) {
+    if (/already registered|already exists/i.test(authError.message)) {
+      const { data: list } = await client.auth.admin.listUsers({ perPage: 1000 });
+      const existing = list?.users?.find((u) => u.email?.toLowerCase() === email);
+      if (!existing) throw new Error(authError.message);
+      authId = existing.id;
+    } else {
+      throw new Error(authError.message);
+    }
+  }
+  if (!authId) throw new Error("Failed to set up sign-in for this user");
+
+  const { error: updateError } = await client
+    .from("users")
+    .update({ auth_user_id: authId, password_hash: null })
+    .eq("id", userId);
+  if (updateError) throw new Error(updateError.message);
+
+  return getUserRecordById(userId);
+}
+
 export async function sendUserWelcomeEmail(id) {
   const current = await getUserRecordById(id);
+  // #region agent log
+  fetch("http://127.0.0.1:7617/ingest/fe06f2ec-2a83-4b03-b45f-cadf002a9913", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a458c3" },
+    body: JSON.stringify({
+      sessionId: "a458c3",
+      runId: "email-debug",
+      hypothesisId: "H1",
+      location: "users.service.js:sendUserWelcomeEmail",
+      message: "send welcome precheck",
+      data: {
+        userFound: Boolean(current),
+        hasAuthUserId: Boolean(current?.authUserId),
+        resendReady: isResendConfigured(),
+        adminReady: isSupabaseAdminEnabled(),
+      },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
   if (!current) throw new Error("User not found");
-  if (!current.authUserId) {
-    throw new Error(
-      "This user cannot receive a welcome email. Remove and re-add them from User Management.",
-    );
+  let profile = current;
+  if (!profile.authUserId) {
+    // #region agent log
+    fetch("http://127.0.0.1:7617/ingest/fe06f2ec-2a83-4b03-b45f-cadf002a9913", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a458c3" },
+      body: JSON.stringify({
+        sessionId: "a458c3",
+        runId: "email-debug",
+        hypothesisId: "H1",
+        location: "users.service.js:sendUserWelcomeEmail",
+        message: "repairing missing auth_user_id",
+        data: { userId: id },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    profile = await repairUserAuthLink(id);
+  }
+  if (!profile?.authUserId) {
+    throw new Error("This user cannot receive a welcome email. Contact an owner for help.");
   }
   if (!isResendConfigured()) {
     throw new Error("Welcome email could not be sent. Try again later.");
   }
 
   await sendWelcomeEmail({
-    email: current.email,
-    name: current.name,
-    role: current.role,
+    email: profile.email,
+    name: profile.name,
+    role: profile.role,
   });
   return { ok: true, emailSent: true };
 }

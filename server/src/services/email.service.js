@@ -1,5 +1,23 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
-import { isSupabaseAuthEnabled } from "../lib/auth-supabase.js";
+import { isSupabaseAdminEnabled } from "../lib/server-capabilities.js";
+
+const DEBUG_LOG = (location, message, data, hypothesisId) => {
+  // #region agent log
+  fetch("http://127.0.0.1:7617/ingest/fe06f2ec-2a83-4b03-b45f-cadf002a9913", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a458c3" },
+    body: JSON.stringify({
+      sessionId: "a458c3",
+      runId: "email-debug",
+      hypothesisId,
+      location,
+      message,
+      data,
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+};
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY?.trim() || "";
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev";
@@ -61,13 +79,16 @@ async function sendViaResend({ to, subject, html }) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = body?.message || body?.error || `Resend send failed (${res.status})`;
+    DEBUG_LOG("email.service.js:sendViaResend", "resend send failed", { status: res.status, error: msg }, "H3");
     throw new Error(msg);
   }
   return body;
 }
 
 async function generateRecoveryLink(email, redirectTo) {
-  if (!isSupabaseAuthEnabled()) {
+  const adminReady = isSupabaseAdminEnabled();
+  DEBUG_LOG("email.service.js:generateRecoveryLink", "recovery link precheck", { adminReady }, "H2");
+  if (!adminReady) {
     throw new Error("Supabase Auth is not configured");
   }
   const client = getSupabaseAdmin();
@@ -76,9 +97,13 @@ async function generateRecoveryLink(email, redirectTo) {
     email: String(email).trim().toLowerCase(),
     options: { redirectTo: getPasswordResetRedirectUrl(redirectTo) },
   });
-  if (error) throw new Error(error.message || "Failed to generate reset link");
+  if (error) {
+    DEBUG_LOG("email.service.js:generateRecoveryLink", "generateLink failed", { error: error.message }, "H2");
+    throw new Error(error.message || "Failed to generate reset link");
+  }
   const link = data?.properties?.action_link;
   if (!link) throw new Error("No reset link returned from Supabase");
+  DEBUG_LOG("email.service.js:generateRecoveryLink", "recovery link created", { hasLink: true }, "H2");
   return link;
 }
 
