@@ -6,7 +6,7 @@ import {
   buildWelcomeEmail,
   KING_G_EMAIL_SUBJECTS,
   renderPlainText,
-} from "../../../supabase/functions/_shared/email-template.js";
+} from "../lib/email-template.js";
 
 const DEBUG_LOG = (location, message, data, hypothesisId) => {
   // #region agent log
