@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 
-import { loginHandler, meHandler, requestPasswordResetHandler, authMiddleware } from "../auth.js";
+import { loginHandler, meHandler, requestPasswordResetHandler, updateProfileHandler, changePasswordHandler, authMiddleware } from "../auth.js";
 import { requirePermission, requireAuth } from "../permissions.js";
 import { listReports } from "./services/reports.service.js";
 import { getServerCapabilities } from "./lib/server-capabilities.js";
@@ -18,6 +18,8 @@ export function createApp() {
   app.post("/api/auth/login", loginHandler);
   app.post("/api/auth/request-password-reset", requestPasswordResetHandler);
   app.get("/api/auth/me", authMiddleware, meHandler);
+  app.patch("/api/auth/profile", authMiddleware, updateProfileHandler);
+  app.patch("/api/auth/password", authMiddleware, changePasswordHandler);
 
   // --- Products (Supabase) ---
   app.get("/api/products", async (_req, res) => {

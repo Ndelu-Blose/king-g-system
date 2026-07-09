@@ -18,7 +18,7 @@
  * - See full business reports (only own sales history)
  */
 
-export const CASHIER_ALLOWED_PATHS = ['/pos', '/pos/sales-history', '/shift-history'] as const;
+export const CASHIER_ALLOWED_PATHS = ['/pos', '/pos/sales-history', '/shift-history', '/profile'] as const;
 
 export function isCashierAllowedPath(pathname: string): boolean {
   return (

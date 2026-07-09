@@ -29,7 +29,7 @@ async function loadUserProfileFromSupabase(): Promise<User | null> {
 
   let query = getSupabase()
     .from('users')
-    .select('id,name,email,role,active')
+    .select('id,name,email,role,active,phone')
     .eq('active', true);
 
   if (authId) query = query.eq('auth_user_id', authId);
@@ -43,6 +43,7 @@ async function loadUserProfileFromSupabase(): Promise<User | null> {
     name: data.name,
     email: data.email,
     role: data.role as UserRole,
+    phone: data.phone ?? null,
   };
 }
 
@@ -163,7 +164,7 @@ export async function requestPasswordReset(email: string): Promise<{ ok: true } 
   const normalized = email.trim().toLowerCase();
   if (!normalized) return { ok: false, error: 'Enter your email address first.' };
 
-  const redirectTo = `${window.location.origin}/login`;
+  const redirectTo = `${window.location.origin}/reset-password`;
   const apiBase = getApiBase();
 
   if (apiBase || usesLocalApiProxy()) {

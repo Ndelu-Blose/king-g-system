@@ -33,6 +33,7 @@ export function toApiUser(profile) {
     name: profile.name,
     email: profile.email,
     role: profile.role,
+    phone: profile.phone ?? null,
   };
 }
 

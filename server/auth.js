@@ -1,7 +1,7 @@
 /**
  * Auth: Supabase Auth (production) + legacy JWT fallback (dev / migration).
  */
-import { getUserByEmail, resolvePasswordResetRecipient } from "./src/services/users.service.js";
+import { getUserByEmail, resolvePasswordResetRecipient, updateOwnProfile, changeOwnPassword, getUserById } from "./src/services/users.service.js";
 import { credentialsValid } from "./src/lib/auth-credentials.js";
 import { resolveBearerUser } from "./src/lib/auth-resolve.js";
 import { legacyTokenTtlSec, signLegacyToken } from "./src/lib/auth-legacy.js";
@@ -11,18 +11,74 @@ import { isResendConfigured, sendPasswordResetEmail } from "./src/services/email
 /**
  * GET /api/auth/me — current user from Bearer token.
  */
-export function meHandler(req, res) {
+export async function meHandler(req, res) {
   if (!req.user) {
     return res.status(401).json({ error: "Authentication required" });
   }
-  return res.json({
-    user: {
-      id: req.user.id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role,
-    },
-  });
+  try {
+    const profile = await getUserById(req.user.id);
+    const user = profile
+      ? {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          role: profile.role,
+          phone: profile.phone ?? null,
+        }
+      : {
+          id: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role,
+          phone: req.user.phone ?? null,
+        };
+    return res.json({ user });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to load profile" });
+  }
+}
+
+export async function updateProfileHandler(req, res) {
+  if (!req.user) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+  const body = req.body || {};
+  try {
+    const updated = await updateOwnProfile(req.user.id, {
+      name: body.name,
+      email: body.email,
+      phone: body.phone,
+    });
+    return res.json({
+      user: {
+        id: updated.id,
+        name: updated.name,
+        email: updated.email,
+        role: updated.role,
+        phone: updated.phone ?? null,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    const msg = e instanceof Error ? e.message : "Failed to update profile";
+    return res.status(400).json({ error: msg });
+  }
+}
+
+export async function changePasswordHandler(req, res) {
+  if (!req.user) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+  const { currentPassword, newPassword } = req.body || {};
+  try {
+    await changeOwnPassword(req.user.id, { currentPassword, newPassword });
+    return res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    const msg = e instanceof Error ? e.message : "Failed to change password";
+    return res.status(400).json({ error: msg });
+  }
 }
 
 export async function loginHandler(req, res) {

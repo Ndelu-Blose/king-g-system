@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth-context';
 import { requestPasswordReset } from '@/lib/auth-api';
+import { getApiBase, usesLocalApiProxy } from '@/lib/api-base';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -16,6 +17,7 @@ export default function Login() {
   const [resetting, setResetting] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
+  const canResetPassword = isSupabaseConfigured || Boolean(getApiBase()) || usesLocalApiProxy();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,7 +132,7 @@ export default function Login() {
                 {error && <p className="text-sm text-destructive">{error}</p>}
                 {resetMessage && <p className="text-sm text-muted-foreground">{resetMessage}</p>}
 
-                {isSupabaseConfigured && (
+                {canResetPassword && (
                   <button
                     type="button"
                     disabled={resetting || !email.trim()}

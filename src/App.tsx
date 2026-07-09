@@ -12,6 +12,8 @@ import { ProductsProvider } from "@/contexts/ProductsContext";
 import { PurchaseOrderProvider } from "@/contexts/PurchaseOrderContext";
 import AppLayout from "@/components/AppLayout";
 import Login from "@/pages/Login";
+import ResetPassword from "@/pages/ResetPassword";
+import ProfilePage from "@/pages/ProfilePage";
 import Dashboard from "@/pages/Dashboard";
 import POS from "@/pages/POS";
 import Products from "@/pages/Products";
@@ -79,6 +81,7 @@ const App = () => (
         >
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
@@ -105,6 +108,7 @@ const App = () => (
               <Route path="/audit/user-activity" element={<UserActivityPage />} />
               <Route path="/variance-approvals" element={<VarianceApprovals />} />
               <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
               <Route path="/voids-refunds" element={<VoidsAndRefundsPage />} />
               <Route path="/inventory/movements" element={<InventoryMovementsPage />} />
               <Route path="/suppliers/deliveries" element={<DeliveriesPage />} />

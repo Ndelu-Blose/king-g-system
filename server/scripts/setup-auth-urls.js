@@ -49,6 +49,8 @@ function buildAllowList() {
     `${PRODUCTION_APP_URL}/**`,
     `${PRODUCTION_APP_URL}/login`,
     `${PRODUCTION_APP_URL}/login/**`,
+    `${PRODUCTION_APP_URL}/reset-password`,
+    `${PRODUCTION_APP_URL}/reset-password/**`,
   ];
   return [...new Set([...production, ...LOCAL_REDIRECTS])].join(",");
 }

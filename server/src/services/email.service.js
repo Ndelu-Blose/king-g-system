@@ -20,7 +20,8 @@ export function isLocalAppHost(hostname) {
 }
 
 /** Prefer production APP_URL when redirect target is localhost (e.g. dev machine triggered reset). */
-export function getAppLoginUrl(redirectTo) {
+export function getPasswordResetRedirectUrl(redirectTo) {
+  const defaultUrl = `${APP_URL}/reset-password`;
   const target = String(redirectTo || "").trim();
   if (target && /^https?:\/\//i.test(target)) {
     try {
@@ -28,14 +29,14 @@ export function getAppLoginUrl(redirectTo) {
       const appUrl = new URL(APP_URL);
       const appIsProduction = !isLocalAppHost(appUrl.hostname);
       if (appIsProduction && isLocalAppHost(url.hostname)) {
-        return `${APP_URL}/login`;
+        return defaultUrl;
       }
       return target;
     } catch {
       /* fall through */
     }
   }
-  return `${APP_URL}/login`;
+  return defaultUrl;
 }
 
 async function sendViaResend({ to, subject, html }) {
@@ -73,7 +74,7 @@ async function generateRecoveryLink(email, redirectTo) {
   const { data, error } = await client.auth.admin.generateLink({
     type: "recovery",
     email: String(email).trim().toLowerCase(),
-    options: { redirectTo: getAppLoginUrl(redirectTo) },
+    options: { redirectTo: getPasswordResetRedirectUrl(redirectTo) },
   });
   if (error) throw new Error(error.message || "Failed to generate reset link");
   const link = data?.properties?.action_link;

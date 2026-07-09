@@ -1,7 +1,8 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import { hashPassword } from "../lib/passwords.js";
-import { isSupabaseAuthEnabled } from "../lib/auth-supabase.js";
+import { isSupabaseAuthEnabled, signInWithSupabaseAuth } from "../lib/auth-supabase.js";
 import { hasAuthUserIdColumn } from "../lib/auth-schema.js";
+import { credentialsValid } from "../lib/auth-credentials.js";
 import {
   isResendConfigured,
   sendPasswordChangedEmail,
@@ -26,8 +27,11 @@ function mapUser(row) {
     role: row.role,
     active: row.active !== false,
     authUserId: row.auth_user_id ?? null,
+    phone: row.phone ?? null,
   };
 }
+
+const PROFILE_FIELDS = "id,name,email,role,password_hash,active,auth_user_id,phone";
 
 export async function getUserByAuthId(authUserId) {
   const id = String(authUserId || "").trim();
@@ -37,7 +41,7 @@ export async function getUserByAuthId(authUserId) {
   const client = await supabase();
   const { data, error } = await client
     .from("users")
-    .select("id,name,email,role,password_hash,active,auth_user_id")
+    .select(PROFILE_FIELDS)
     .eq("auth_user_id", id)
     .maybeSingle();
   if (error) throw error;
@@ -50,6 +54,7 @@ export async function getUserByAuthId(authUserId) {
     passwordHash: data.password_hash ?? null,
     active: data.active !== false,
     authUserId: data.auth_user_id ?? null,
+    phone: data.phone ?? null,
   };
 }
 
@@ -60,9 +65,7 @@ export async function getUserByEmail(email) {
   const client = await supabase();
 
   const withAuth = await hasAuthUserIdColumn();
-  const fields = withAuth
-    ? "id,name,email,role,password_hash,active,auth_user_id"
-    : "id,name,email,role,password_hash,active";
+  const fields = withAuth ? PROFILE_FIELDS : "id,name,email,role,password_hash,active,phone";
   const { data, error } = await client
     .from("users")
     .select(fields)
@@ -78,6 +81,7 @@ export async function getUserByEmail(email) {
     passwordHash: data.password_hash ?? null,
     active: data.active !== false,
     authUserId: data.auth_user_id ?? null,
+    phone: data.phone ?? null,
   };
 }
 
@@ -85,7 +89,7 @@ export async function getUserById(id) {
   const client = await supabase();
   const { data, error } = await client
     .from("users")
-    .select("id,name,email,role,active")
+    .select("id,name,email,role,active,phone")
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -97,7 +101,7 @@ export async function listUsers() {
   const client = await supabase();
   const { data, error } = await client
     .from("users")
-    .select("id,name,email,role,active")
+    .select("id,name,email,role,active,phone")
     .order("name", { ascending: true });
   if (error) throw error;
   return (data ?? []).map(mapUser);
@@ -229,7 +233,7 @@ export async function resolvePasswordResetRecipient(email) {
   };
 }
 
-export async function updateUser(id, { name, email, role, active }) {
+export async function updateUser(id, { name, email, role, active, phone }) {
   const client = await supabase();
   const current = await getUserRecordById(id);
   if (!current) throw new Error("User not found");
@@ -255,6 +259,10 @@ export async function updateUser(id, { name, email, role, active }) {
     patch.role = trimmedRole;
   }
   if (active !== undefined) patch.active = !!active;
+  if (phone !== undefined) {
+    const trimmed = String(phone || "").trim();
+    patch.phone = trimmed || null;
+  }
 
   if (Object.keys(patch).length === 0) {
     return mapUser({
@@ -264,6 +272,7 @@ export async function updateUser(id, { name, email, role, active }) {
       role: current.role,
       active: current.active,
       auth_user_id: current.authUserId,
+      phone: current.phone ?? null,
     });
   }
 
@@ -286,7 +295,7 @@ export async function updateUser(id, { name, email, role, active }) {
     .from("users")
     .update(patch)
     .eq("id", id)
-    .select("id,name,email,role,active")
+    .select("id,name,email,role,active,phone")
     .single();
   if (error) throw error;
   return mapUser(data);
@@ -295,9 +304,7 @@ export async function updateUser(id, { name, email, role, active }) {
 async function getUserRecordById(id) {
   const client = await supabase();
   const withAuth = await hasAuthUserIdColumn();
-  const fields = withAuth
-    ? "id,name,email,role,password_hash,active,auth_user_id"
-    : "id,name,email,role,password_hash,active";
+  const fields = withAuth ? PROFILE_FIELDS : "id,name,email,role,password_hash,active,phone";
   const { data, error } = await client.from("users").select(fields).eq("id", id).maybeSingle();
   if (error) throw error;
   if (!data) return null;
@@ -309,7 +316,46 @@ async function getUserRecordById(id) {
     passwordHash: data.password_hash ?? null,
     active: data.active !== false,
     authUserId: data.auth_user_id ?? null,
+    phone: data.phone ?? null,
   };
+}
+
+/** Self-service profile update (name, email, phone only). */
+export async function updateOwnProfile(userId, { name, email, phone }) {
+  const patch = {};
+  if (name !== undefined) patch.name = name;
+  if (email !== undefined) patch.email = email;
+  if (phone !== undefined) patch.phone = phone;
+  if (Object.keys(patch).length === 0) {
+    const current = await getUserById(userId);
+    if (!current) throw new Error("User not found");
+    return current;
+  }
+  return updateUser(userId, patch);
+}
+
+/** Self-service password change with current-password verification. */
+export async function changeOwnPassword(userId, { currentPassword, newPassword }) {
+  const current = String(currentPassword || "");
+  const next = String(newPassword || "");
+  if (!current) throw new Error("Current password is required");
+  if (next.length < 6) throw new Error("New password must be at least 6 characters");
+
+  const record = await getUserRecordById(userId);
+  if (!record) throw new Error("User not found");
+
+  if (record.authUserId && (await hasAuthUserIdColumn()) && isSupabaseAuthEnabled()) {
+    const verified = await signInWithSupabaseAuth(record.email, current);
+    if (!verified?.ok) {
+      throw new Error("Current password is incorrect");
+    }
+    return updateUserPassword(userId, next);
+  }
+
+  if (!credentialsValid(record, current)) {
+    throw new Error("Current password is incorrect");
+  }
+  return updateUserPassword(userId, next);
 }
 
 export async function updateUserPassword(id, password) {

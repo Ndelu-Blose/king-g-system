@@ -13,6 +13,7 @@ import {
   Shield,
   LogOut,
   History,
+  UserCircle,
   SlidersHorizontal,
   Ban,
   AlertTriangle,
@@ -423,7 +424,13 @@ export default function AppSidebar() {
       )}
 
       <div className="border-t border-sidebar-border p-3">
-        <div className="mb-2 flex items-center gap-2.5">
+        <NavLink
+          to="/profile"
+          className={cn(
+            'mb-2 flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-sidebar-accent',
+            pathname === '/profile' && 'bg-sidebar-accent',
+          )}
+        >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-secondary-foreground">
             {user.name.charAt(0)}
           </div>
@@ -431,7 +438,8 @@ export default function AppSidebar() {
             <p className="truncate text-sm font-medium text-foreground">{user.name}</p>
             <p className="text-xs text-primary">{roleLabels[user.role]}</p>
           </div>
-        </div>
+          <UserCircle className="h-4 w-4 shrink-0 text-muted-foreground" />
+        </NavLink>
         <button
           type="button"
           onClick={logout}
