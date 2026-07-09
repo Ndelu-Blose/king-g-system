@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import multer from "multer";
 
 import { loginHandler, meHandler, requestPasswordResetHandler, updateProfileHandler, changePasswordHandler, authMiddleware } from "../auth.js";
 import { requirePermission, requireAuth } from "../permissions.js";
@@ -8,6 +9,13 @@ import { getServerCapabilities } from "./lib/server-capabilities.js";
 import * as pos from "./services/pos.service.js";
 import * as users from "./services/users.service.js";
 import * as receiving from "./services/receiving.service.js";
+import * as deliveries from "./services/deliveries.service.js";
+import { sendError } from "./lib/api-error.js";
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 export function createApp() {
   const app = express();
@@ -27,8 +35,7 @@ export function createApp() {
       const products = await pos.getAllProducts();
       res.json(products);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load products" });
+      return sendError(res, "GET /api/products", e, { fallback: "Failed to load products" });
     }
   });
 
@@ -40,8 +47,7 @@ export function createApp() {
       if (!product) return res.status(404).json(null);
       res.json(product);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load product" });
+      return sendError(res, "GET /api/products/barcode/:barcode", e, { fallback: "Failed to load product" });
     }
   });
 
@@ -52,8 +58,7 @@ export function createApp() {
       const products = await pos.searchProducts(q, limit);
       res.json(products);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to search products" });
+      return sendError(res, "GET /api/products/search", e, { fallback: "Failed to search products" });
     }
   });
 
@@ -65,8 +70,7 @@ export function createApp() {
       const result = await pos.seedBeverageCatalog();
       res.json({ ok: true, ...result });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: e?.message || "Failed to seed beverage catalog" });
+      return sendError(res, "POST /api/products/seed-beverages", e, { fallback: "Failed to seed beverage catalog" });
     }
   });
 
@@ -82,10 +86,7 @@ export function createApp() {
       const product = await pos.createProduct(req.body);
       res.status(201).json(product);
     } catch (e) {
-      console.error(e);
-      const msg = e?.message || "Failed to create product";
-      const status = /already exists|required|valid/i.test(msg) ? 400 : 500;
-      res.status(status).json({ error: msg });
+      return sendError(res, "POST /api/products", e, { fallback: "Failed to create product" });
     }
   });
 
@@ -97,10 +98,7 @@ export function createApp() {
       const product = await pos.updateProduct(req.params.id, req.body);
       res.json(product);
     } catch (e) {
-      console.error(e);
-      const msg = e?.message || "Failed to update product";
-      const status = /not found/i.test(msg) ? 404 : /already|required|valid/i.test(msg) ? 400 : 500;
-      res.status(status).json({ error: msg });
+      return sendError(res, "PUT /api/products/:id", e, { fallback: "Failed to update product" });
     }
   });
 
@@ -112,10 +110,7 @@ export function createApp() {
       const result = await pos.deleteProduct(req.params.id);
       res.json({ ok: true, ...result });
     } catch (e) {
-      console.error(e);
-      const msg = e?.message || "Failed to delete product";
-      const status = /not found/i.test(msg) ? 404 : 500;
-      res.status(status).json({ error: msg });
+      return sendError(res, "DELETE /api/products/:id", e, { fallback: "Failed to delete product" });
     }
   });
 
@@ -124,8 +119,7 @@ export function createApp() {
       const balances = await pos.getInventoryBalances();
       res.json(balances);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load inventory" });
+      return sendError(res, "GET /api/inventory/balances", e, { fallback: "Failed to load inventory" });
     }
   });
 
@@ -134,8 +128,7 @@ export function createApp() {
       const categories = await pos.getCategories();
       res.json(categories);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load categories" });
+      return sendError(res, "GET /api/categories", e, { fallback: "Failed to load categories" });
     }
   });
 
@@ -146,8 +139,7 @@ export function createApp() {
       const transactions = await pos.getAllTransactions(cashierId);
       res.json(transactions);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load transactions" });
+      return sendError(res, "GET /api/transactions", e, { fallback: "Failed to load transactions" });
     }
   });
 
@@ -253,12 +245,17 @@ export function createApp() {
       }
       res.status(201).json({ id: result.id, createdAt: result.createdAt });
     } catch (e) {
-      console.error(e);
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes("Insufficient stock") || msg.includes("Invalid quantity") || msg.includes("Invalid sale items") || msg.includes("Invalid lineTotal") || msg.includes("Invalid productId")) {
+      if (
+        msg.includes("Insufficient stock") ||
+        msg.includes("Invalid quantity") ||
+        msg.includes("Invalid sale items") ||
+        msg.includes("Invalid lineTotal") ||
+        msg.includes("Invalid productId")
+      ) {
         return res.status(400).json({ error: msg });
       }
-      res.status(500).json({ error: "Failed to create sale" });
+      return sendError(res, "POST /api/sales", e, { fallback: "Failed to create sale" });
     }
   });
 
@@ -274,8 +271,7 @@ export function createApp() {
       });
       res.status(201).json({ id, createdAt });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to create help request" });
+      return sendError(res, "POST /api/help-requests", e, { fallback: "Failed to create help request" });
     }
   });
 
@@ -285,8 +281,7 @@ export function createApp() {
       const list = await pos.getHelpRequests(status);
       res.json(list);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load help requests" });
+      return sendError(res, "GET /api/help-requests", e, { fallback: "Failed to load help requests" });
     }
   });
 
@@ -298,8 +293,7 @@ export function createApp() {
       await pos.markHelpRequestAcknowledged(id, acknowledgedBy);
       res.json({ ok: true });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to acknowledge" });
+      return sendError(res, "PATCH /api/help-requests/:id/acknowledge", e, { fallback: "Failed to acknowledge" });
     }
   });
 
@@ -317,8 +311,7 @@ export function createApp() {
       if (!result.ok) return res.status(400).json({ error: result.error });
       res.json({ ok: true });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to void sale" });
+      return sendError(res, "POST /api/sales/:id/void", e, { fallback: "Failed to void sale" });
     }
   });
 
@@ -337,8 +330,7 @@ export function createApp() {
       if (!result.ok) return res.status(400).json({ error: result.error });
       res.json({ ok: true });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to process refund" });
+      return sendError(res, "POST /api/sales/:id/refund", e, { fallback: "Failed to process refund" });
     }
   });
 
@@ -351,12 +343,12 @@ export function createApp() {
         actorId: req.user.id,
         actorRole: req.user.role,
         invoiceNumber: invoiceNumber || null,
+        idempotencyKey: req.headers["idempotency-key"] || null,
       });
       if (!result.ok) return res.status(400).json({ error: result.error });
       res.status(201).json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to receive stock" });
+      return sendError(res, "POST /api/inventory/receive", e, { fallback: "Failed to receive stock" });
     }
   });
 
@@ -374,8 +366,7 @@ export function createApp() {
       if (!result.ok) return res.status(400).json({ error: result.error });
       res.status(201).json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to post adjustment" });
+      return sendError(res, "POST /api/inventory/adjustments", e, { fallback: "Failed to post adjustment" });
     }
   });
 
@@ -393,8 +384,7 @@ export function createApp() {
       });
       res.status(201).json({ ok: true });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to write audit" });
+      return sendError(res, "POST /api/audit", e, { fallback: "Failed to write audit" });
     }
   });
 
@@ -403,20 +393,17 @@ export function createApp() {
     try {
       res.json(await users.listUsers());
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : "Failed to load users";
-      res.status(500).json({ error: msg });
+      return sendError(res, "GET /api/users", e, { fallback: "Failed to load users" });
     }
   });
 
   app.post("/api/users", authMiddleware, requirePermission("admin.users"), async (req, res) => {
+    const idempotencyKey = req.headers["idempotency-key"] || null;
     try {
-      const created = await users.createUser(req.body || {});
+      const created = await users.createUser(req.body || {}, { idempotencyKey });
       res.status(201).json(created);
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : "Failed to create user";
-      res.status(400).json({ error: msg });
+      return sendError(res, "POST /api/users", e, { fallback: "Failed to create user" });
     }
   });
 
@@ -429,9 +416,7 @@ export function createApp() {
     try {
       res.json(await users.updateUser(id, body));
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : "Failed to update user";
-      res.status(400).json({ error: msg });
+      return sendError(res, "PATCH /api/users/:id", e, { fallback: "Failed to update user" });
     }
   });
 
@@ -442,9 +427,7 @@ export function createApp() {
       await users.updateUserPassword(id, password);
       res.json({ ok: true });
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : "Failed to change password";
-      res.status(400).json({ error: msg });
+      return sendError(res, "PATCH /api/users/:id/password", e, { fallback: "Failed to change password" });
     }
   });
 
@@ -454,9 +437,7 @@ export function createApp() {
       const result = await users.sendUserWelcomeEmail(id);
       res.json(result);
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : "Failed to send welcome email";
-      res.status(400).json({ error: msg });
+      return sendError(res, "POST /api/users/:id/send-welcome", e, { fallback: "Failed to send welcome email" });
     }
   });
 
@@ -469,9 +450,7 @@ export function createApp() {
       await users.deleteUser(id);
       res.json({ ok: true });
     } catch (e) {
-      console.error(e);
-      const msg = e instanceof Error ? e.message : "Failed to delete user";
-      res.status(400).json({ error: msg });
+      return sendError(res, "DELETE /api/users/:id", e, { fallback: "Failed to delete user" });
     }
   });
 
@@ -481,8 +460,7 @@ export function createApp() {
       const settings = await pos.getSettings();
       res.json(settings);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load settings" });
+      return sendError(res, "GET /api/settings", e, { fallback: "Failed to load settings" });
     }
   });
 
@@ -495,8 +473,7 @@ export function createApp() {
       }
       res.json(await pos.getSettings());
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to save settings" });
+      return sendError(res, "PUT /api/settings", e, { fallback: "Failed to save settings" });
     }
   });
 
@@ -507,8 +484,7 @@ export function createApp() {
       const list = await pos.getDiscrepancyCases(status);
       res.json(list);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load discrepancies" });
+      return sendError(res, "GET /api/discrepancies", e, { fallback: "Failed to load discrepancies" });
     }
   });
 
@@ -523,8 +499,7 @@ export function createApp() {
       });
       res.status(201).json({ id, createdAt });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to create discrepancy case" });
+      return sendError(res, "POST /api/discrepancies", e, { fallback: "Failed to create discrepancy case" });
     }
   });
 
@@ -536,8 +511,7 @@ export function createApp() {
       await pos.closeDiscrepancyCase(id, req.user.id, resolutionNotes);
       res.json({ ok: true });
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to close case" });
+      return sendError(res, "PATCH /api/discrepancies/:id/close", e, { fallback: "Failed to close case" });
     }
   });
 
@@ -549,8 +523,7 @@ export function createApp() {
       if (!intake) return res.status(404).json(null);
       res.json(intake);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load intake" });
+      return sendError(res, "GET /api/intakes/:id", e, { fallback: "Failed to load intake" });
     }
   });
 
@@ -561,8 +534,7 @@ export function createApp() {
       if (!copy) return res.status(404).json(null);
       res.json(copy);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to load blind copy" });
+      return sendError(res, "GET /api/blind-copies/:id", e, { fallback: "Failed to load blind copy" });
     }
   });
 
@@ -576,8 +548,7 @@ export function createApp() {
       const result = await receiving.saveIntakeDraft({ payload: body, user: req.user });
       res.status(201).json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to save intake draft" });
+      return sendError(res, "POST /api/intakes/draft", e, { fallback: "Failed to save intake draft" });
     }
   });
 
@@ -589,8 +560,7 @@ export function createApp() {
       const result = await receiving.saveIntakeDraft({ payload: body, user: req.user });
       res.json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to update intake draft" });
+      return sendError(res, "PUT /api/intakes/:id/draft", e, { fallback: "Failed to update intake draft" });
     }
   });
 
@@ -603,8 +573,7 @@ export function createApp() {
       const result = await receiving.saveExpectedLines(id, body.lines);
       res.json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to save expected lines" });
+      return sendError(res, "POST /api/intakes/:id/expected-lines", e, { fallback: "Failed to save expected lines" });
     }
   });
 
@@ -617,8 +586,7 @@ export function createApp() {
       const result = await receiving.saveVerification(id, body.lines, body.status);
       res.json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to save verification" });
+      return sendError(res, "POST /api/intakes/:id/verification", e, { fallback: "Failed to save verification" });
     }
   });
 
@@ -628,8 +596,7 @@ export function createApp() {
       const result = await receiving.confirmIntake(id, { user: req.user });
       res.json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to confirm intake" });
+      return sendError(res, "POST /api/intakes/:id/confirm", e, { fallback: "Failed to confirm intake" });
     }
   });
 
@@ -639,8 +606,7 @@ export function createApp() {
       const result = await receiving.generateBlindCopy(id, { user: req.user });
       res.json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to generate blind copy" });
+      return sendError(res, "POST /api/intakes/:id/blind-copy", e, { fallback: "Failed to generate blind copy" });
     }
   });
 
@@ -650,8 +616,57 @@ export function createApp() {
       const result = await receiving.issueBlindCopy(id, { user: req.user });
       res.json(result);
     } catch (e) {
-      console.error(e);
-      res.status(500).json({ error: "Failed to issue blind copy" });
+      return sendError(res, "POST /api/blind-copies/:id/issue", e, { fallback: "Failed to issue blind copy" });
+    }
+  });
+
+  // --- Delivery records with document upload ---
+  app.get("/api/deliveries", authMiddleware, requireAuth, async (_req, res) => {
+    try {
+      res.json(await deliveries.listDeliveryRecords());
+    } catch (e) {
+      return sendError(res, "GET /api/deliveries", e, { fallback: "Failed to load deliveries" });
+    }
+  });
+
+  app.post(
+    "/api/deliveries",
+    authMiddleware,
+    requirePermission("inventory.receive.post"),
+    upload.fields([
+      { name: "invoice", maxCount: 1 },
+      { name: "pod", maxCount: 1 },
+    ]),
+    async (req, res) => {
+      const invoiceFile = req.files?.invoice?.[0];
+      const podFile = req.files?.pod?.[0];
+      const { poRef, supplier, invoiceRef } = req.body || {};
+      try {
+        const created = await deliveries.createDeliveryRecord({
+          poRef,
+          supplier,
+          invoiceRef,
+          invoiceFile,
+          podFile,
+          uploadedBy: req.user?.id,
+        });
+        res.status(201).json(created);
+      } catch (e) {
+        return sendError(res, "POST /api/deliveries", e, { fallback: "Failed to record delivery" });
+      }
+    }
+  );
+
+  app.get("/api/deliveries/:id/documents/:type", authMiddleware, requireAuth, async (req, res) => {
+    const { id, type } = req.params;
+    if (!["invoice", "pod"].includes(type)) {
+      return res.status(400).json({ error: "Invalid document type" });
+    }
+    try {
+      const result = await deliveries.getDeliveryDocumentUrl(id, type);
+      res.json(result);
+    } catch (e) {
+      return sendError(res, "GET /api/deliveries/:id/documents/:type", e, { fallback: "Failed to load document" });
     }
   });
 
@@ -666,9 +681,7 @@ export function createApp() {
       const reports = await listReports({ limit });
       res.json(reports);
     } catch (e) {
-      // If Supabase isn't configured yet, don't crash the whole API.
-      const msg = e instanceof Error ? e.message : String(e);
-      res.status(500).json({ error: msg });
+      return sendError(res, "GET /api/reports", e, { fallback: "Failed to load reports" });
     }
   });
 

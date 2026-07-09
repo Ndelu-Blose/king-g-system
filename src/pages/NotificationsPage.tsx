@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, AlertTriangle, Package, TrendingDown, Phone, Check } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -183,10 +184,18 @@ export default function NotificationsPage() {
   const hasLocal = helpRequests.some((r) => r.id.startsWith('local-'));
 
   const handleAcknowledge = async (req: HelpRequest) => {
+    if (acknowledgingId) return;
     setAcknowledgingId(req.id);
     try {
       const ok = await acknowledgeHelpRequest(req.id, user?.name ?? user?.id ?? 'manager');
-      if (ok) void queryClient.invalidateQueries({ queryKey: ['help-requests'] });
+      if (ok) {
+        toast.success('Help request acknowledged.');
+        void queryClient.invalidateQueries({ queryKey: ['help-requests'] });
+      } else {
+        toast.error('Failed to acknowledge help request.');
+      }
+    } catch {
+      toast.error('Failed to acknowledge help request.');
     } finally {
       setAcknowledgingId(null);
     }

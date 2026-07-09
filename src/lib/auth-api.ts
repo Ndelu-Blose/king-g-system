@@ -1,5 +1,6 @@
 import type { User, UserRole } from './types';
 import { getApiBase, usesLocalApiProxy } from './api-base';
+import { isPasswordRecoveryFlow } from './recovery-session';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
 export const TOKEN_KEY = 'kingg_token';
@@ -235,6 +236,10 @@ export async function fetchCurrentUser(): Promise<User | null> {
       storeToken(token);
       const user = await loadUserFromToken(token);
       if (!user) {
+        // Keep recovery sessions alive on /reset-password (welcome + forgot-password emails).
+        if (isPasswordRecoveryFlow()) {
+          return null;
+        }
         clearStoredToken();
         await getSupabase().auth.signOut();
       }

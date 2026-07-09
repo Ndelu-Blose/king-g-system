@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Package, FileText, Upload, Truck, Boxes, Warehouse, Building2 } from 'lucide-react';
+import { Package, FileText, Upload, Truck, Boxes, Warehouse, Building2, Loader2, ExternalLink } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
 import {
   Select,
@@ -16,22 +16,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useInventory } from '@/contexts/InventoryContext';
 import { getSupplierNames } from '@/lib/suppliers-store';
 import { toast } from 'sonner';
-
-interface Delivery {
-  id: string;
-  date: string;
-  supplier: string;
-  poRef: string;
-  status: 'pending' | 'received' | 'partial';
-  invoiceRef?: string;
-  invoiceFileName?: string;
-  podFileName?: string;
-}
+import { validateUploadFile } from '@/lib/file-upload';
+import {
+  createDeliveryRecord,
+  fetchDeliveries,
+  getDeliveryDocumentUrl,
+  type DeliveryRecord,
+} from '@/lib/deliveries-api';
 
 export default function DeliveriesPage() {
   const { inventory } = useInventory();
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const supplierOptions = getSupplierNames();
 
   const [recordPoRef, setRecordPoRef] = useState('');
@@ -39,6 +37,23 @@ export default function DeliveriesPage() {
   const [recordInvoiceRef, setRecordInvoiceRef] = useState('');
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [podFile, setPodFile] = useState<File | null>(null);
+
+  const loadDeliveries = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await fetchDeliveries();
+      setDeliveries(list);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to load deliveries');
+      setDeliveries([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDeliveries();
+  }, [loadDeliveries]);
 
   const lowStockThreshold = 10;
   const loungeValue = inventory.reduce((sum, i) => sum + i.loungeQty * i.costPrice, 0);
@@ -51,28 +66,53 @@ export default function DeliveriesPage() {
       ? deliveries
       : deliveries.filter((d) => d.status === statusFilter);
 
-  const handleRecordDelivery = () => {
+  const handleRecordDelivery = async () => {
+    if (uploading) return;
     if (!recordPoRef.trim() || !recordSupplier.trim()) {
       toast.error('Enter PO ref and supplier.');
       return;
     }
-    const newDelivery: Delivery = {
-      id: `d-${Date.now()}`,
-      date: new Date().toISOString().slice(0, 10),
-      supplier: recordSupplier,
-      poRef: recordPoRef,
-      status: 'pending',
-      invoiceRef: recordInvoiceRef || undefined,
-      invoiceFileName: invoiceFile?.name,
-      podFileName: podFile?.name,
-    };
-    setDeliveries((prev) => [newDelivery, ...prev]);
-    setRecordPoRef('');
-    setRecordSupplier('');
-    setRecordInvoiceRef('');
-    setInvoiceFile(null);
-    setPodFile(null);
-    toast.success('Delivery recorded. Invoice and POD attached.');
+    const invoiceCheck = validateUploadFile(invoiceFile, 'Invoice');
+    if (!invoiceCheck.ok) {
+      toast.error(invoiceCheck.message);
+      return;
+    }
+    const podCheck = validateUploadFile(podFile, 'Proof of delivery');
+    if (!podCheck.ok) {
+      toast.error(podCheck.message);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await createDeliveryRecord({
+        poRef: recordPoRef.trim(),
+        supplier: recordSupplier.trim(),
+        invoiceRef: recordInvoiceRef.trim() || undefined,
+        invoiceFile: invoiceFile!,
+        podFile: podFile!,
+      });
+      setRecordPoRef('');
+      setRecordSupplier('');
+      setRecordInvoiceRef('');
+      setInvoiceFile(null);
+      setPodFile(null);
+      toast.success('Delivery recorded. Invoice and POD uploaded successfully.');
+      await loadDeliveries();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to record delivery');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleViewDocument = async (recordId: string, type: 'invoice' | 'pod') => {
+    try {
+      const { url } = await getDeliveryDocumentUrl(recordId, type);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to open document');
+    }
   };
 
   return (
@@ -86,11 +126,10 @@ export default function DeliveriesPage() {
           Deliveries & Invoices
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Place orders, upload invoices and proof of delivery (POD), and see what’s happening in the lounge and warehouse.
+          Place orders, upload invoices and proof of delivery (POD), and see what's happening in the lounge and warehouse.
         </p>
       </div>
 
-      {/* Lounge & warehouse overview */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -130,7 +169,6 @@ export default function DeliveriesPage() {
         </CardContent>
       </Card>
 
-      {/* Quick actions */}
       <div className="flex flex-wrap gap-3">
         <Button asChild className="gap-2">
           <Link to="/suppliers/purchase-orders">
@@ -146,7 +184,6 @@ export default function DeliveriesPage() {
         </Button>
       </div>
 
-      {/* Record delivery – upload Invoice & POD */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -154,7 +191,7 @@ export default function DeliveriesPage() {
             Record delivery (upload Invoice & POD)
           </CardTitle>
           <CardDescription>
-            Link a delivery to a PO and attach invoice and proof of delivery. These are stored for audit.
+            Link a delivery to a PO and attach invoice and proof of delivery. Files are stored securely for audit.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -166,12 +203,13 @@ export default function DeliveriesPage() {
                 placeholder="e.g. PO-103"
                 value={recordPoRef}
                 onChange={(e) => setRecordPoRef(e.target.value)}
+                disabled={uploading}
               />
             </div>
             <div className="space-y-2">
               <Label htmlFor="supplier">Supplier</Label>
               {supplierOptions.length > 0 ? (
-                <Select value={recordSupplier} onValueChange={setRecordSupplier}>
+                <Select value={recordSupplier} onValueChange={setRecordSupplier} disabled={uploading}>
                   <SelectTrigger id="supplier">
                     <SelectValue placeholder="Select supplier" />
                   </SelectTrigger>
@@ -187,6 +225,7 @@ export default function DeliveriesPage() {
                   value={recordSupplier}
                   onChange={(e) => setRecordSupplier(e.target.value)}
                   placeholder="Supplier name"
+                  disabled={uploading}
                 />
               )}
             </div>
@@ -198,38 +237,49 @@ export default function DeliveriesPage() {
               placeholder="e.g. INV-2026-090"
               value={recordInvoiceRef}
               onChange={(e) => setRecordInvoiceRef(e.target.value)}
+              disabled={uploading}
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Invoice (file)</Label>
+              <Label>Invoice (file, required)</Label>
               <Input
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => setInvoiceFile(e.target.files?.[0] ?? null)}
                 className="cursor-pointer"
+                disabled={uploading}
               />
               {invoiceFile && <p className="text-xs text-muted-foreground">{invoiceFile.name}</p>}
             </div>
             <div className="space-y-2">
-              <Label>Proof of delivery – POD (file)</Label>
+              <Label>Proof of delivery – POD (file, required)</Label>
               <Input
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={(e) => setPodFile(e.target.files?.[0] ?? null)}
                 className="cursor-pointer"
+                disabled={uploading}
               />
               {podFile && <p className="text-xs text-muted-foreground">{podFile.name}</p>}
             </div>
           </div>
-          <Button onClick={handleRecordDelivery} className="gap-2">
-            <Upload className="h-4 w-4" />
-            Record delivery
+          <Button onClick={handleRecordDelivery} className="gap-2" disabled={uploading}>
+            {uploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Uploading…
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4" />
+                Record delivery
+              </>
+            )}
           </Button>
         </CardContent>
       </Card>
 
-      {/* Deliveries table */}
       <div className="flex items-center justify-between">
         <h2 className="font-semibold text-foreground">Delivery history</h2>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -257,39 +307,66 @@ export default function DeliveriesPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted-foreground">
+                  Loading deliveries…
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted-foreground">
                   No deliveries recorded yet.
                 </td>
               </tr>
-            )}
-            {filtered.map((d) => (
-              <tr key={d.id} className="border-b border-border/50 hover:bg-muted/20">
-                <td className="px-5 py-3 text-foreground">{d.date}</td>
-                <td className="px-5 py-3 font-medium text-foreground">{d.supplier}</td>
-                <td className="px-5 py-3 text-muted-foreground">{d.poRef}</td>
-                <td className="px-5 py-3">
-                  <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-foreground capitalize">
-                    {d.status}
-                  </span>
-                </td>
-                <td className="px-5 py-3 text-muted-foreground flex flex-col gap-0.5">
-                  {d.invoiceRef && (
-                    <span className="flex items-center gap-1">
-                      <FileText className="h-3.5 w-3.5" /> {d.invoiceRef}
+            ) : (
+              filtered.map((d) => (
+                <tr key={d.id} className="border-b border-border/50 hover:bg-muted/20">
+                  <td className="px-5 py-3 text-foreground">
+                    {new Date(d.createdAt).toLocaleDateString('en-ZA')}
+                  </td>
+                  <td className="px-5 py-3 font-medium text-foreground">{d.supplier}</td>
+                  <td className="px-5 py-3 text-muted-foreground">{d.poRef}</td>
+                  <td className="px-5 py-3">
+                    <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-foreground capitalize">
+                      {d.status}
                     </span>
-                  )}
-                  {d.invoiceFileName && (
-                    <span className="text-xs">Invoice: {d.invoiceFileName}</span>
-                  )}
-                  {d.podFileName && (
-                    <span className="text-xs">POD: {d.podFileName}</span>
-                  )}
-                  {!d.invoiceRef && !d.invoiceFileName && !d.podFileName && '—'}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground">
+                    {d.invoiceRef && (
+                      <span className="flex items-center gap-1">
+                        <FileText className="h-3.5 w-3.5" /> {d.invoiceRef}
+                      </span>
+                    )}
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {d.hasInvoice && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-xs"
+                          onClick={() => handleViewDocument(d.id, 'invoice')}
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          {d.invoiceFileName || 'Invoice'}
+                        </Button>
+                      )}
+                      {d.hasPod && (
+                        <Button
+                          variant="link"
+                          size="sm"
+                          className="h-auto p-0 text-xs"
+                          onClick={() => handleViewDocument(d.id, 'pod')}
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          {d.podFileName || 'POD'}
+                        </Button>
+                      )}
+                      {!d.hasInvoice && !d.hasPod && !d.invoiceRef && '—'}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

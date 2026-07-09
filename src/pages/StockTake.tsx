@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Loader2 } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
 import { useInventory } from '@/contexts/InventoryContext';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ export default function StockTake() {
   const { inventory, applyStockTake } = useInventory();
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const getCount = (productId: string) => {
     const v = counts[productId];
@@ -31,21 +32,27 @@ export default function StockTake() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving) return;
     if (!allCounted) {
       toast.error('Enter a count for every product.');
       return;
     }
-    rows.forEach((r) => {
-      const counted = getCount(r.productId);
-      if (counted !== null) applyStockTake(r.productId, counted);
-    });
-    setSubmitted(true);
-    const variances = rows.filter((r) => r.variance !== null && r.variance !== 0);
-    toast.success(
-      variances.length > 0
-        ? `Stock take complete. ${variances.length} variance(s) applied to inventory.`
-        : 'Stock take complete. Counts applied.'
-    );
+    setSaving(true);
+    try {
+      rows.forEach((r) => {
+        const counted = getCount(r.productId);
+        if (counted !== null) applyStockTake(r.productId, counted);
+      });
+      setSubmitted(true);
+      const variances = rows.filter((r) => r.variance !== null && r.variance !== 0);
+      toast.success(
+        variances.length > 0
+          ? `Stock take complete. ${variances.length} variance(s) applied to inventory.`
+          : 'Stock take complete. Counts applied.'
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const setCount = (productId: string, value: string) => {
@@ -120,8 +127,8 @@ export default function StockTake() {
             </table>
           </div>
           <div className="flex items-center gap-4">
-            <Button type="submit" disabled={!allCounted}>
-              Complete stock take
+            <Button type="submit" disabled={!allCounted || saving}>
+              {saving ? 'Saving…' : 'Complete stock take'}
             </Button>
             {hasVariance && (
               <span className="text-sm text-amber-600 dark:text-amber-400">Variances will be applied to inventory (warehouse/lounge adjusted).</span>

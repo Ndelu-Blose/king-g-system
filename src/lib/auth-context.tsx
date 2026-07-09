@@ -20,6 +20,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+
+    // Let /reset-password handle email-link tokens before profile bootstrap runs.
+    if (typeof window !== 'undefined' && window.location.pathname === '/reset-password') {
+      setBootstrapping(false);
+      return;
+    }
+
     fetchCurrentUser().then((restored) => {
       if (!cancelled && restored) setUser(restored);
       if (!cancelled) setBootstrapping(false);

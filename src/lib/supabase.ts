@@ -20,7 +20,13 @@ export function getSupabase(): SupabaseClient {
     throw new Error('Supabase env vars missing: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY');
   }
   if (!client) {
-    client = createClient(supabaseUrl!, supabaseAnonKey!);
+    client = createClient(supabaseUrl!, supabaseAnonKey!, {
+      auth: {
+        detectSessionInUrl: true,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
   }
   return client;
 }

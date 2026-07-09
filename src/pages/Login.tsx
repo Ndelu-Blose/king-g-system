@@ -133,8 +133,12 @@ export default function Login() {
                 {canResetPassword && (
                   <button
                     type="button"
-                    disabled={resetting || !email.trim()}
+                    disabled={resetting}
                     onClick={async () => {
+                      if (!email.trim()) {
+                        setError('Enter your email address above, then click Forgot password?.');
+                        return;
+                      }
                       setError('');
                       setResetMessage('');
                       setResetting(true);

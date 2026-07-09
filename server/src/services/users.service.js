@@ -12,6 +12,11 @@ import {
 
 const VALID_ROLES = new Set(["cashier", "manager", "senior_manager", "owner"]);
 
+const USER_CREATE_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const userCreateIdempotencyCache = new Map(); // key -> { expiresAt, result }
+
+const WELCOME_EMAIL_COOLDOWN_MS = 60 * 1000;
+
 function randomId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -108,7 +113,7 @@ export async function listUsers() {
   return (data ?? []).map(mapUser);
 }
 
-export async function createUser({ name, email, role, password }) {
+export async function createUser({ name, email, role, password }, { idempotencyKey } = {}) {
   const trimmedName = String(name || "").trim();
   const trimmedEmail = String(email || "").trim().toLowerCase();
   const trimmedRole = String(role || "").trim();
@@ -118,6 +123,13 @@ export async function createUser({ name, email, role, password }) {
   if (!trimmedEmail || !trimmedEmail.includes("@")) throw new Error("Valid email is required");
   if (!VALID_ROLES.has(trimmedRole)) throw new Error("Invalid role");
   if (pwd.length < 6) throw new Error("Password must be at least 6 characters");
+
+  if (idempotencyKey && typeof idempotencyKey === "string") {
+    const cached = userCreateIdempotencyCache.get(idempotencyKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.result;
+    }
+  }
 
   const existing = await getUserByEmail(trimmedEmail);
   if (existing) throw new Error("A user with this email already exists");
@@ -203,7 +215,16 @@ export async function createUser({ name, email, role, password }) {
     }
   }
 
-  return { ...created, emailSent, emailError };
+  const result = { ...created, emailSent, emailError };
+
+  if (idempotencyKey && typeof idempotencyKey === "string") {
+    userCreateIdempotencyCache.set(idempotencyKey, {
+      expiresAt: Date.now() + USER_CREATE_IDEMPOTENCY_TTL_MS,
+      result,
+    });
+  }
+
+  return result;
 }
 
 /** Link a profile missing auth_user_id to Supabase Auth (existing or new account). */
@@ -301,11 +322,31 @@ export async function sendUserWelcomeEmail(id) {
     throw new Error("Welcome email could not be sent. Try again later.");
   }
 
+  const client = await supabase();
+  const { data: cooldownRow } = await client
+    .from("users")
+    .select("last_welcome_email_at")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (cooldownRow?.last_welcome_email_at) {
+    const lastSent = new Date(cooldownRow.last_welcome_email_at).getTime();
+    if (Date.now() - lastSent < WELCOME_EMAIL_COOLDOWN_MS) {
+      throw new Error("Welcome email was sent recently. Please wait a minute before resending.");
+    }
+  }
+
   await sendWelcomeEmail({
     email: profile.email,
     name: profile.name,
     role: profile.role,
   });
+
+  await client
+    .from("users")
+    .update({ last_welcome_email_at: new Date().toISOString() })
+    .eq("id", id);
+
   return { ok: true, emailSent: true };
 }
 

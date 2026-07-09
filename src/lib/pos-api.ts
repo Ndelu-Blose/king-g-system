@@ -114,15 +114,19 @@ async function apiGet<T>(path: string): Promise<T> {
   return res.json();
 }
 
-async function apiPost<T>(path: string, body: unknown): Promise<T> {
+async function apiPost<T>(path: string, body: unknown, options?: { idempotencyKey?: string }): Promise<T> {
+  const headers = authHeaders();
+  if (options?.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey;
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers,
     body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `API ${res.status}`);
+    throw new Error((err as { error?: string }).error || `Something went wrong. Please try again or contact support.`);
   }
   return res.json();
 }
@@ -336,8 +340,16 @@ export async function getCategories(): Promise<string[]> {
 }
 
 /** Create sale; decrements stock on server, returns sale id and createdAt for receipt. Server uses authenticated user as cashier. */
-export async function createSale(payload: SalePayload): Promise<{ id: string; createdAt: string }> {
-  return apiPost<{ id: string; createdAt: string }>('/api/sales', payload);
+export async function createSale(
+  payload: SalePayload,
+  options?: { idempotencyKey?: string }
+): Promise<{ id: string; createdAt: string }> {
+  const key = options?.idempotencyKey ?? crypto.randomUUID();
+  return apiPost<{ id: string; createdAt: string }>(
+    '/api/sales',
+    { ...payload, idempotencyKey: key },
+    { idempotencyKey: key }
+  );
 }
 
 type AuditWriteEntry = Omit<AuditEntry, 'id' | 'timestamp'> & {

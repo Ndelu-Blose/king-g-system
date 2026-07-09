@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo } from 'react';
-import { CreditCard, Banknote, Building2, Receipt, X } from 'lucide-react';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import { CreditCard, Banknote, Building2, Receipt, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -16,6 +16,7 @@ import { VAT_RATE } from '@/lib/pos-constants';
 import { ReceiptView } from '@/components/pos/ReceiptView';
 import type { PaymentMethod, ReceiptData } from '@/types/pos';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const QUICK_CASH = [50, 100, 200, 500];
 
@@ -35,6 +36,8 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
   const [cashReceived, setCashReceived] = useState('');
   const [paymentComplete, setPaymentComplete] = useState(false);
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   const subtotal = useMemo(() => cart.reduce((sum, c) => sum + c.unitPrice * c.qty, 0), [cart]);
   const vat = useMemo(() => Math.round(subtotal * VAT_RATE * 100) / 100, [subtotal]);
@@ -53,69 +56,84 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
 
   const completeSale = useCallback(
     async (method: PaymentMethod, amount: number, cashReceivedAmount?: number, changeAmount?: number) => {
-      if (!user?.id || cart.length === 0) return;
-      const items = cart.map((c) => ({
-        productId: c.product.id,
-        barcode: c.product.barcode,
-        sku: c.product.sku,
-        name: c.product.name,
-        qty: c.qty,
-        unitPrice: c.unitPrice,
-        lineTotal: c.unitPrice * c.qty,
-      }));
-      const { id, createdAt } = await createSale({
-        cashierId: user.id,
-        cashierName: user.name,
-        items,
-        subtotal,
-        vat,
-        total: grandTotal,
-        payments: [
+      if (!user?.id || cart.length === 0 || processing) return;
+      setProcessing(true);
+      try {
+        const items = cart.map((c) => ({
+          productId: c.product.id,
+          barcode: c.product.barcode,
+          sku: c.product.sku,
+          name: c.product.name,
+          qty: c.qty,
+          unitPrice: c.unitPrice,
+          lineTotal: c.unitPrice * c.qty,
+        }));
+        const { id, createdAt } = await createSale(
           {
-            method,
-            amount,
-            ...(method === 'cash' && {
-              cashReceived: cashReceivedAmount ?? amount,
-              change: changeAmount ?? 0,
-            }),
+            cashierId: user.id,
+            cashierName: user.name,
+            items,
+            subtotal,
+            vat,
+            total: grandTotal,
+            payments: [
+              {
+                method,
+                amount,
+                ...(method === 'cash' && {
+                  cashReceived: cashReceivedAmount ?? amount,
+                  change: changeAmount ?? 0,
+                }),
+              },
+            ],
           },
-        ],
-      });
-      recordSaleToShift({
-        saleId: id,
-        total: grandTotal,
-        items: items.map((i) => ({ productName: i.name, qty: i.qty, price: i.unitPrice })),
-        paymentMethod: (method === 'cash' ? 'cash' : 'card') as 'cash' | 'card',
-        ...(method === 'cash' && {
-          cashReceived: cashReceivedAmount ?? amount,
-          changeGiven: changeAmount ?? 0,
-        }),
-        createdAt,
-        cashierId: user.id,
-        cashierName: user.name,
-      });
-      setReceiptData({
-        saleId: id,
-        createdAt,
-        items,
-        subtotal,
-        vat,
-        total: grandTotal,
-        payments: [
-          {
-            method,
-            amount,
-            ...(method === 'cash' && {
-              cashReceived: cashReceivedAmount ?? amount,
-              change: changeAmount ?? 0,
-            }),
-          },
-        ],
-      });
-      setPaymentComplete(true);
-      clearCart();
+          { idempotencyKey: idempotencyKeyRef.current }
+        );
+        recordSaleToShift({
+          saleId: id,
+          total: grandTotal,
+          items: items.map((i) => ({ productName: i.name, qty: i.qty, price: i.unitPrice })),
+          paymentMethod: (method === 'cash' ? 'cash' : 'card') as 'cash' | 'card',
+          ...(method === 'cash' && {
+            cashReceived: cashReceivedAmount ?? amount,
+            changeGiven: changeAmount ?? 0,
+          }),
+          createdAt,
+          cashierId: user.id,
+          cashierName: user.name,
+        });
+        setReceiptData({
+          saleId: id,
+          createdAt,
+          items,
+          subtotal,
+          vat,
+          total: grandTotal,
+          payments: [
+            {
+              method,
+              amount,
+              ...(method === 'cash' && {
+                cashReceived: cashReceivedAmount ?? amount,
+                change: changeAmount ?? 0,
+              }),
+            },
+          ],
+        });
+        setPaymentComplete(true);
+        clearCart();
+        idempotencyKeyRef.current = crypto.randomUUID();
+      } catch (error) {
+        toast.error(
+          error instanceof Error && error.message
+            ? error.message
+            : 'Payment could not be completed. Please try again or contact support.'
+        );
+      } finally {
+        setProcessing(false);
+      }
     },
-    [user?.id, user?.name, cart, subtotal, vat, grandTotal, clearCart, recordSaleToShift]
+    [user?.id, user?.name, cart, subtotal, vat, grandTotal, clearCart, recordSaleToShift, processing]
   );
 
   const handleCashConfirm = () => {
@@ -187,7 +205,8 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
                 <button
                   type="button"
                   onClick={() => setStep('cash')}
-                  className="p-4 rounded-lg bg-secondary hover:bg-sidebar-accent transition-colors flex flex-col items-center gap-2"
+                  disabled={processing}
+                  className="p-4 rounded-lg bg-secondary hover:bg-sidebar-accent transition-colors flex flex-col items-center gap-2 disabled:opacity-50"
                 >
                   <Banknote className="w-8 h-8 text-success" />
                   <span className="text-sm font-medium text-foreground">Cash</span>
@@ -195,23 +214,30 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
                 <button
                   type="button"
                   onClick={() => handleCardOrEft('card')}
-                  className="p-4 rounded-lg bg-secondary hover:bg-sidebar-accent transition-colors flex flex-col items-center gap-2"
+                  disabled={processing}
+                  className="p-4 rounded-lg bg-secondary hover:bg-sidebar-accent transition-colors flex flex-col items-center gap-2 disabled:opacity-50"
                 >
                   <CreditCard className="w-8 h-8 text-primary" />
-                  <span className="text-sm font-medium text-foreground">Card</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {processing ? 'Processing…' : 'Card'}
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleCardOrEft('eft')}
-                  className="p-4 rounded-lg bg-secondary hover:bg-sidebar-accent transition-colors flex flex-col items-center gap-2"
+                  disabled={processing}
+                  className="p-4 rounded-lg bg-secondary hover:bg-sidebar-accent transition-colors flex flex-col items-center gap-2 disabled:opacity-50"
                 >
                   <Building2 className="w-8 h-8 text-primary" />
-                  <span className="text-sm font-medium text-foreground">EFT</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {processing ? 'Processing…' : 'EFT'}
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleCardOrEft('card')}
-                  className="p-4 rounded-lg bg-secondary hover:bg-sidebar-accent transition-colors flex flex-col items-center gap-2"
+                  disabled={processing}
+                  className="p-4 rounded-lg bg-secondary hover:bg-sidebar-accent transition-colors flex flex-col items-center gap-2 disabled:opacity-50"
                 >
                   <Receipt className="w-8 h-8 text-muted-foreground" />
                   <span className="text-sm font-medium text-foreground">Split</span>
@@ -269,10 +295,17 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
                   </Button>
                   <Button
                     onClick={handleCashConfirm}
-                    disabled={cashNum < grandTotal}
+                    disabled={cashNum < grandTotal || processing}
                     className="flex-1 gold-gradient text-primary-foreground"
                   >
-                    Complete cash payment
+                    {processing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing payment…
+                      </>
+                    ) : (
+                      'Complete cash payment'
+                    )}
                   </Button>
                 </div>
               </div>

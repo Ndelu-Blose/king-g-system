@@ -32,7 +32,10 @@ export default function DiscrepanciesPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amountOrQty.trim() || !description.trim()) return;
+    if (!amountOrQty.trim() || !description.trim()) {
+      toast.error('Enter amount/quantity and description.');
+      return;
+    }
     addDiscrepancy({
       type,
       amountOrQty: amountOrQty.trim(),

@@ -52,6 +52,7 @@ export default function ReceiveStockPage() {
   const [verifiedLines, setVerifiedLines] = useState<VerifiedLine[]>([]);
   const [location, setLocation] = useState<StockLocation>('warehouse');
   const [confirmed, setConfirmed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   // Step 2: add line form
   const [addProductId, setAddProductId] = useState('');
@@ -125,17 +126,22 @@ export default function ReceiveStockPage() {
   };
 
   const confirmIntake = () => {
-    if (!canProceedStep3 || !user) return;
-    for (const line of verifiedLines) {
-      const qtyToReceive = line.actualQuantity;
-      if (qtyToReceive > 0) {
-        receiveStock(line.productId, qtyToReceive, location);
+    if (!canProceedStep3 || !user || confirming) return;
+    setConfirming(true);
+    try {
+      for (const line of verifiedLines) {
+        const qtyToReceive = line.actualQuantity;
+        if (qtyToReceive > 0) {
+          receiveStock(line.productId, qtyToReceive, location);
+        }
       }
+      setConfirmed(true);
+      toast.success(
+        `Stock intake confirmed. ${verifiedLines.filter((l) => l.actualQuantity > 0).length} line(s) updated. Audit trail: ${supplier}, ${invoiceNumber}, ${user.name}.`
+      );
+    } finally {
+      setConfirming(false);
     }
-    setConfirmed(true);
-    toast.success(
-      `Stock intake confirmed. ${verifiedLines.filter((l) => l.actualQuantity > 0).length} line(s) updated. Audit trail: ${supplier}, ${invoiceNumber}, ${user.name}.`
-    );
   };
 
   const startNewDelivery = () => {
@@ -474,9 +480,9 @@ export default function ReceiveStockPage() {
 
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setStep(3)}>Back</Button>
-            <Button onClick={confirmIntake}>
+            <Button onClick={confirmIntake} disabled={!canProceedStep3 || confirming}>
               <PackagePlus className="h-4 w-4 mr-2" />
-              Confirm Stock Intake
+              {confirming ? 'Confirming…' : 'Confirm Stock Intake'}
             </Button>
           </div>
         </div>

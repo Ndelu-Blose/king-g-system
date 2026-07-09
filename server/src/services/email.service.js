@@ -1,5 +1,12 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import { isSupabaseAdminEnabled } from "../lib/server-capabilities.js";
+import {
+  buildPasswordChangedEmail,
+  buildPasswordResetEmail,
+  buildWelcomeEmail,
+  KING_G_EMAIL_SUBJECTS,
+  renderPlainText,
+} from "../../../supabase/functions/_shared/email-template.js";
 
 const DEBUG_LOG = (location, message, data, hypothesisId) => {
   // #region agent log
@@ -57,10 +64,18 @@ export function getPasswordResetRedirectUrl(redirectTo) {
   return defaultUrl;
 }
 
-async function sendViaResend({ to, subject, html }) {
+async function sendViaResend({ to, subject, html, text }) {
   if (!isResendConfigured()) {
     throw new Error("Resend is not configured (RESEND_API_KEY missing)");
   }
+
+  const payload = {
+    from: `${FROM_NAME} <${FROM_EMAIL}>`,
+    to: [to],
+    subject,
+    html,
+  };
+  if (text) payload.text = text;
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -68,12 +83,7 @@ async function sendViaResend({ to, subject, html }) {
       Authorization: `Bearer ${RESEND_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      from: `${FROM_NAME} <${FROM_EMAIL}>`,
-      to: [to],
-      subject,
-      html,
-    }),
+    body: JSON.stringify(payload),
   });
 
   const body = await res.json().catch(() => ({}));
@@ -107,11 +117,6 @@ async function generateRecoveryLink(email, redirectTo) {
   return link;
 }
 
-function passwordResetHtml({ name, link, intro }) {
-  const greeting = name ? `<p>Hi ${name},</p>` : "";
-  return `${greeting}<p>${intro}</p><p><a href="${link}" style="color:#b8860b;font-weight:600">Open King G</a></p><p>If you did not request this, you can ignore this email.</p>`;
-}
-
 /**
  * Send password reset email via Resend (all King G users with Supabase Auth).
  */
@@ -122,16 +127,28 @@ export async function sendPasswordResetEmail(email, options = {}) {
   }
 
   const link = await generateRecoveryLink(normalized, options.redirectTo);
-  const html = passwordResetHtml({
+  const html = buildPasswordResetEmail({
     name: options.name,
     link,
-    intro: options.intro || "We received a request to reset your King G password.",
+    appUrl: APP_URL,
+  });
+  const text = renderPlainText({
+    headline: "Password reset request",
+    greetingName: options.name,
+    paragraphs: [
+      "We received a request to reset the password for your King G account.",
+      "Use the link below to choose a new password.",
+    ],
+    ctaLabel: "Reset password",
+    ctaUrl: link,
+    appUrl: APP_URL,
   });
 
   const result = await sendViaResend({
     to: normalized,
-    subject: options.subject || "Reset your King G password",
+    subject: options.subject || KING_G_EMAIL_SUBJECTS.recovery,
     html,
+    text,
   });
 
   return { ok: true, resendId: result?.id ?? null };
@@ -146,16 +163,29 @@ export async function sendWelcomeEmail({ email, name, role }) {
   const roleLabel = String(role || "staff").replace(/_/g, " ");
 
   const link = await generateRecoveryLink(normalized);
-  const html = passwordResetHtml({
+  const html = buildWelcomeEmail({
     name: displayName,
+    role: roleLabel,
     link,
-    intro: `Your King G account has been created as <strong>${roleLabel}</strong>. Use the link below to set your password and sign in.`,
+    appUrl: APP_URL,
+  });
+  const text = renderPlainText({
+    headline: "Welcome to the team",
+    greetingName: displayName,
+    paragraphs: [
+      `Your King G account has been created as ${roleLabel}.`,
+      "Set your password using the link below before your first sign-in.",
+    ],
+    ctaLabel: "Set your password",
+    ctaUrl: link,
+    appUrl: APP_URL,
   });
 
   const result = await sendViaResend({
     to: normalized,
-    subject: "Welcome to King G — set your password",
+    subject: KING_G_EMAIL_SUBJECTS.welcome,
     html,
+    text,
   });
 
   return { ok: true, resendId: result?.id ?? null };
@@ -169,16 +199,28 @@ export async function sendPasswordChangedEmail({ email, name }) {
   const displayName = String(name || "").trim() || normalized;
 
   const link = await generateRecoveryLink(normalized);
-  const html = passwordResetHtml({
+  const html = buildPasswordChangedEmail({
     name: displayName,
     link,
-    intro: "Your King G password was changed by an administrator. If this was not expected, reset your password immediately using the link below.",
+    appUrl: APP_URL,
+  });
+  const text = renderPlainText({
+    headline: "Your password was updated",
+    greetingName: displayName,
+    paragraphs: [
+      "An administrator has changed the password on your King G account.",
+      "If this was unexpected, secure your account using the link below.",
+    ],
+    ctaLabel: "Secure my account",
+    ctaUrl: link,
+    appUrl: APP_URL,
   });
 
   const result = await sendViaResend({
     to: normalized,
-    subject: "Your King G password was changed",
+    subject: KING_G_EMAIL_SUBJECTS.passwordChanged,
     html,
+    text,
   });
 
   return { ok: true, resendId: result?.id ?? null };

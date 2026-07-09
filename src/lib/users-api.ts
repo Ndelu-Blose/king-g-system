@@ -37,9 +37,16 @@ async function parseError(res: Response): Promise<string> {
   return `Request failed (${res.status})`;
 }
 
+function mapUserFacingError(message: string): string {
+  if (/^API \d{3}$/.test(message) || /prisma|supabase|postgres|pgrst/i.test(message)) {
+    return 'Something went wrong. Please try again or contact support.';
+  }
+  return message;
+}
+
 async function handleResponse(res: Response): Promise<void> {
   if (!res.ok) {
-    const message = await parseError(res);
+    const message = mapUserFacingError(await parseError(res));
     if (isAuthFailureStatus(res.status)) {
       clearStoredToken();
       throw new ApiAuthError(message);
@@ -54,10 +61,14 @@ async function apiGet<T>(path: string): Promise<T> {
   return res.json();
 }
 
-async function usersWritePost<T>(path: string, body: unknown): Promise<T> {
+async function usersWritePost<T>(path: string, body: unknown, options?: { idempotencyKey?: string }): Promise<T> {
+  const headers = authHeaders();
+  if (options?.idempotencyKey) {
+    headers['Idempotency-Key'] = options.idempotencyKey;
+  }
   const res = await fetch(`${getUsersWriteBase()}${path}`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers,
     body: JSON.stringify(body),
   });
   await handleResponse(res);
@@ -122,7 +133,8 @@ export async function createUser(payload: {
   role: UserRole;
   password: string;
 }): Promise<CreateUserResult> {
-  const created = await usersWritePost<CreateUserResult>('/api/users', payload);
+  const idempotencyKey = crypto.randomUUID();
+  const created = await usersWritePost<CreateUserResult>('/api/users', payload, { idempotencyKey });
   if (!created.authUserId) {
     throw new Error('Account was created, but sign-in could not be set up. Contact an owner for help.');
   }

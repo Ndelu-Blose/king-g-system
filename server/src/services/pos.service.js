@@ -48,6 +48,9 @@ function isNotFoundError(err) {
 const SALE_DEDUP_TTL_MS = 2_500;
 const saleDedupCache = new Map(); // key -> { expiresAt, promise }
 
+const RECEIVE_DEDUP_TTL_MS = 5_000;
+const receiveDedupCache = new Map();
+
 function pruneSaleDedupCache(now = Date.now()) {
   for (const [k, v] of saleDedupCache.entries()) {
     if (!v || v.expiresAt <= now) saleDedupCache.delete(k);
@@ -384,7 +387,12 @@ export async function getCategories() {
   return ["All", ...cats];
 }
 
-export async function receiveStock(productId, qty, location, { actorId, actorRole, invoiceNumber }) {
+export async function receiveStock(productId, qty, location, { actorId, actorRole, invoiceNumber, idempotencyKey }) {
+  if (idempotencyKey) {
+    const cached = receiveDedupCache.get(idempotencyKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.result;
+  }
+
   const client = await supabase();
   const n = Math.max(0, Number(qty) || 0);
   if (!productId || n <= 0) return { ok: false, error: "Invalid quantity" };
@@ -428,7 +436,11 @@ export async function receiveStock(productId, qty, location, { actorId, actorRol
     reasonCode: null,
   });
 
-  return { ok: true, before, after };
+  const result = { ok: true, before, after };
+  if (idempotencyKey) {
+    receiveDedupCache.set(idempotencyKey, { expiresAt: Date.now() + RECEIVE_DEDUP_TTL_MS, result });
+  }
+  return result;
 }
 
 export async function postStockAdjustment(productId, delta, reasonCode, { actorId, actorRole, approverId, approverRole }) {
@@ -477,6 +489,22 @@ export async function createSale(payload, cashierName = "") {
 
   const cashierId = payload?.cashierId;
   const dedupKey = buildSaleIdempotencyKey(payload, cashierId);
+  const clientIdempotencyKey =
+    payload?.idempotencyKey && typeof payload.idempotencyKey === "string"
+      ? payload.idempotencyKey
+      : null;
+
+  if (clientIdempotencyKey) {
+    const { data: existingSale, error: existingErr } = await client
+      .from("sales")
+      .select("id,created_at")
+      .eq("idempotency_key", clientIdempotencyKey)
+      .maybeSingle();
+    if (existingErr) throw existingErr;
+    if (existingSale) {
+      return { id: existingSale.id, createdAt: existingSale.created_at, created: false };
+    }
+  }
 
   pruneSaleDedupCache();
   const existing = saleDedupCache.get(dedupKey);
@@ -530,10 +558,21 @@ export async function createSale(payload, cashierName = "") {
       change_given: payment.change ?? null,
       status: "completed",
       created_at: createdAt,
+      ...(clientIdempotencyKey ? { idempotency_key: clientIdempotencyKey } : {}),
     };
 
     const { error: saleErr } = await client.from("sales").insert(saleRow);
-    if (saleErr) throw saleErr;
+    if (saleErr) {
+      if (clientIdempotencyKey && /duplicate|unique/i.test(saleErr.message || "")) {
+        const { data: raced } = await client
+          .from("sales")
+          .select("id,created_at")
+          .eq("idempotency_key", clientIdempotencyKey)
+          .maybeSingle();
+        if (raced) return { id: raced.id, createdAt: raced.created_at, created: false };
+      }
+      throw saleErr;
+    }
 
     const rows = items.map((item) => ({
       sale_id: id,
@@ -729,6 +768,21 @@ export async function writeAudit(entry) {
 
 export async function createHelpRequest({ cashierId, cashierName, message = "" }) {
   const client = await supabase();
+
+  const thirtySecondsAgo = new Date(Date.now() - 30_000).toISOString();
+  const { data: recent, error: recentErr } = await client
+    .from("help_requests")
+    .select("id,created_at")
+    .eq("cashier_id", cashierId)
+    .eq("status", "pending")
+    .gte("created_at", thirtySecondsAgo)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (recentErr) throw recentErr;
+  if (recent?.length) {
+    return { id: recent[0].id, createdAt: recent[0].created_at, duplicate: true };
+  }
+
   const id = randomId("HR");
   const createdAt = new Date().toISOString();
 
@@ -769,12 +823,25 @@ export async function getHelpRequests(status = null) {
 
 export async function markHelpRequestAcknowledged(id, acknowledgedBy) {
   const client = await supabase();
+
+  const { data: existing, error: fetchErr } = await client
+    .from("help_requests")
+    .select("status,acknowledged_at,acknowledged_by")
+    .eq("id", id)
+    .maybeSingle();
+  if (fetchErr) throw fetchErr;
+  if (!existing) throw new Error("Help request not found");
+  if (existing.status === "acknowledged") {
+    return { ok: true, alreadyAcknowledged: true };
+  }
+
   const now = new Date().toISOString();
   const { error } = await client
     .from("help_requests")
     .update({ status: "acknowledged", acknowledged_at: now, acknowledged_by: acknowledgedBy })
     .eq("id", id);
   if (error) throw error;
+  return { ok: true };
 }
 
 export async function getSettings() {

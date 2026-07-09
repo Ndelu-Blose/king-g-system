@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Save } from 'lucide-react';
+import { Settings, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,14 +35,23 @@ function load(): SystemSettings {
 
 export default function SystemSettingsPage() {
   const [settings, setSettings] = useState<SystemSettings>(load);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setSettings(load());
   }, []);
 
   const handleSave = () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    toast.success('Settings saved.');
+    if (saving) return;
+    setSaving(true);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      toast.success('Settings saved successfully.');
+    } catch {
+      toast.error('Failed to save settings. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -136,9 +145,18 @@ export default function SystemSettingsPage() {
           </CardContent>
         </Card>
 
-        <Button onClick={handleSave} className="gap-2">
-          <Save className="h-4 w-4" />
-          Save settings
+        <Button onClick={handleSave} className="gap-2" disabled={saving}>
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Save className="h-4 w-4" />
+              Save settings
+            </>
+          )}
         </Button>
       </div>
     </div>

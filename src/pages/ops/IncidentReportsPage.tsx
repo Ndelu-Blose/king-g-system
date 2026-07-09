@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileWarning, Plus } from 'lucide-react';
+import { FileWarning, Plus, Loader2 } from 'lucide-react';
 import {
   getIncidents,
   addIncident,
@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { BackButton } from '@/components/BackButton';
+import { validateUploadFile, uploadIncidentAttachment, getIncidentAttachmentUrl } from '@/lib/file-upload';
 
 const INCIDENT_TYPES = [
   'Security',
@@ -37,25 +38,60 @@ export default function IncidentReportsPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const refresh = () => setList(getIncidents());
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !description.trim()) return;
-    addIncident({
-      type,
-      title: title.trim(),
-      description: description.trim(),
-      location: location.trim() || undefined,
-      reportedBy: user?.name,
-    });
-    refresh();
-    setShowForm(false);
-    setTitle('');
-    setDescription('');
-    setLocation('');
-    toast.success('Incident report saved.');
+    if (submitting) return;
+    if (!title.trim() || !description.trim()) {
+      toast.error('Title and description are required.');
+      return;
+    }
+    if (attachmentFile) {
+      const check = validateUploadFile(attachmentFile, 'Attachment', { required: false });
+      if (!check.ok) {
+        toast.error(check.message);
+        return;
+      }
+    }
+
+    setSubmitting(true);
+    try {
+      const incidentId = `inc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      let attachmentName: string | undefined;
+      let attachmentStoragePath: string | undefined;
+
+      if (attachmentFile) {
+        const uploaded = await uploadIncidentAttachment(attachmentFile, incidentId);
+        attachmentName = uploaded.fileName;
+        attachmentStoragePath = uploaded.storagePath;
+      }
+
+      addIncident({
+        id: incidentId,
+        type,
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim() || undefined,
+        reportedBy: user?.name,
+        attachmentName,
+        attachmentStoragePath,
+      });
+      refresh();
+      setShowForm(false);
+      setTitle('');
+      setDescription('');
+      setLocation('');
+      setAttachmentFile(null);
+      toast.success('Incident report saved.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save incident report.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleResolve = (id: string) => {
@@ -132,9 +168,27 @@ export default function IncidentReportsPage() {
               placeholder="Optional — e.g. Main bar, VIP"
             />
           </div>
-          <Button type="submit" size="lg" className="w-full sm:w-auto">
-            <FileWarning className="w-4 h-4 mr-2" />
-            Save report
+          <div className="space-y-2">
+            <Label>Attachment (optional)</Label>
+            <Input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              onChange={(e) => setAttachmentFile(e.target.files?.[0] ?? null)}
+              disabled={submitting}
+            />
+          </div>
+          <Button type="submit" size="lg" className="w-full sm:w-auto" disabled={submitting}>
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              <>
+                <FileWarning className="w-4 h-4 mr-2" />
+                Save report
+              </>
+            )}
           </Button>
         </form>
       )}
@@ -164,6 +218,23 @@ export default function IncidentReportsPage() {
                     {formatDate(r.reportedAt)}
                     {r.reportedBy && ` · ${r.reportedBy}`}
                   </p>
+                  {r.attachmentName && r.attachmentStoragePath ? (
+                    <Button
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-xs mt-1"
+                      onClick={async () => {
+                        try {
+                          const url = await getIncidentAttachmentUrl(r.attachmentStoragePath!);
+                          window.open(url, '_blank', 'noopener,noreferrer');
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Failed to open attachment');
+                        }
+                      }}
+                    >
+                      View attachment: {r.attachmentName}
+                    </Button>
+                  ) : null}
                 </div>
                 <Button variant="outline" size="sm" onClick={() => handleResolve(r.id)}>
                   Mark resolved

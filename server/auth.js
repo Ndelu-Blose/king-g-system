@@ -7,6 +7,7 @@ import { resolveBearerUser } from "./src/lib/auth-resolve.js";
 import { legacyTokenTtlSec, signLegacyToken } from "./src/lib/auth-legacy.js";
 import { isSupabaseAuthEnabled, signInWithSupabaseAuth } from "./src/lib/auth-supabase.js";
 import { isResendConfigured, sendPasswordResetEmail } from "./src/services/email.service.js";
+import { logRouteError, sendError } from "./src/lib/api-error.js";
 
 /**
  * GET /api/auth/me — current user from Bearer token.
@@ -34,8 +35,7 @@ export async function meHandler(req, res) {
         };
     return res.json({ user });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Failed to load profile" });
+    return sendError(res, "GET /api/auth/me", e, { fallback: "Failed to load profile" });
   }
 }
 
@@ -60,9 +60,7 @@ export async function updateProfileHandler(req, res) {
       },
     });
   } catch (e) {
-    console.error(e);
-    const msg = e instanceof Error ? e.message : "Failed to update profile";
-    return res.status(400).json({ error: msg });
+    return sendError(res, "PATCH /api/auth/profile", e, { fallback: "Failed to update profile" });
   }
 }
 
@@ -75,9 +73,7 @@ export async function changePasswordHandler(req, res) {
     await changeOwnPassword(req.user.id, { currentPassword, newPassword });
     return res.json({ ok: true });
   } catch (e) {
-    console.error(e);
-    const msg = e instanceof Error ? e.message : "Failed to change password";
-    return res.status(400).json({ error: msg });
+    return sendError(res, "PATCH /api/auth/password", e, { fallback: "Failed to change password" });
   }
 }
 
@@ -132,8 +128,7 @@ export async function loginHandler(req, res) {
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Login failed" });
+    return sendError(res, "POST /api/auth/login", e, { fallback: "Login failed" });
   }
 }
 
@@ -165,8 +160,9 @@ export async function requestPasswordResetHandler(req, res) {
     }
     return res.json({ ok: true });
   } catch (e) {
-    console.error("Password reset email failed:", e);
-    return res.status(500).json({ error: "Failed to send password reset email" });
+    return sendError(res, "POST /api/auth/request-password-reset", e, {
+      fallback: "Failed to send password reset email",
+    });
   }
 }
 
@@ -186,7 +182,7 @@ export function authMiddleware(req, res, next) {
       next();
     })
     .catch((e) => {
-      console.error(e);
+      logRouteError("authMiddleware", e);
       res.status(401).json({ error: "Invalid or expired token" });
     });
 }

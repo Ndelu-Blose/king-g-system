@@ -1,5 +1,10 @@
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import { Resend } from "npm:resend@4.0.0";
+import {
+  buildAuthActionEmail,
+  buildAuthActionPlainText,
+  getAuthEmailSubject,
+} from "../_shared/email-template.js";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY") ?? "");
 const hookSecretRaw = Deno.env.get("SEND_EMAIL_HOOK_SECRET") ?? "";
@@ -7,17 +12,11 @@ const hookSecret = hookSecretRaw.replace(/^v1,whsec_/, "");
 const fromAddress =
   Deno.env.get("RESEND_FROM_EMAIL") ?? "onboarding@resend.dev";
 const fromName = Deno.env.get("RESEND_FROM_NAME") ?? "King G";
+const appUrl = (Deno.env.get("APP_URL") ?? "https://king-g-system.vercel.app").replace(
+  /\/$/,
+  "",
+);
 const projectRef = "tpydiklyduxjkvenfvzd";
-
-const subjects: Record<string, string> = {
-  signup: "Confirm your King G account",
-  recovery: "Reset your King G password",
-  invite: "You have been invited to King G",
-  magiclink: "Your King G sign-in link",
-  email_change: "Confirm your new email address",
-  email_change_new: "Confirm your new email address",
-  reauthentication: "Your King G verification code",
-};
 
 function confirmationUrl(emailData: {
   token_hash: string;
@@ -30,28 +29,6 @@ function confirmationUrl(emailData: {
     redirect_to: emailData.redirect_to,
   });
   return `https://${projectRef}.supabase.co/auth/v1/verify?${params.toString()}`;
-}
-
-function buildHtml(
-  action: string,
-  confirmationUrlValue: string,
-  token: string,
-) {
-  const linkBlock = `<p><a href="${confirmationUrlValue}" style="color:#b8860b;font-weight:600">Open King G</a></p>`;
-  switch (action) {
-    case "recovery":
-      return `<h2>Reset your password</h2><p>We received a request to reset your King G password.</p>${linkBlock}<p>If you did not request this, you can ignore this email.</p>`;
-    case "signup":
-      return `<h2>Confirm your email</h2><p>Finish setting up your King G account using the link below.</p>${linkBlock}`;
-    case "invite":
-      return `<h2>You are invited</h2><p>You have been invited to join King G.</p>${linkBlock}`;
-    case "magiclink":
-      return `<h2>Sign in to King G</h2><p>Use this one-time link to sign in.</p>${linkBlock}`;
-    case "reauthentication":
-      return `<h2>Verification code</h2><p>Your code is <strong>${token}</strong></p>`;
-    default:
-      return `<h2>King G</h2><p>Please confirm using the link below.</p>${linkBlock}`;
-  }
 }
 
 Deno.serve(async (req) => {
@@ -81,25 +58,36 @@ Deno.serve(async (req) => {
     };
 
     const action = email_data.email_action_type;
-    const subject = subjects[action] ?? "King G notification";
+    const subject = getAuthEmailSubject(action);
     const url = confirmationUrl(email_data);
-    const html = buildHtml(action, url, email_data.token);
+    const html = buildAuthActionEmail({
+      action,
+      confirmationUrl: url,
+      token: email_data.token,
+      appUrl,
+    });
+    const text = buildAuthActionPlainText({
+      action,
+      confirmationUrl: url,
+      token: email_data.token,
+      appUrl,
+    });
 
     const { error } = await resend.emails.send({
       from: `${fromName} <${fromAddress}>`,
       to: [user.email],
       subject,
       html,
+      text,
     });
 
     if (error) throw error;
     return Response.json({});
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("auth-send-email:", message);
+    console.error("auth-send-email:", error);
     return Response.json(
-      { error: { message } },
-      { status: 401 },
+      { error: { message: "Failed to send email. Please try again or contact support." } },
+      { status: 500 },
     );
   }
 });

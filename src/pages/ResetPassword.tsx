@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { establishRecoverySession } from '@/lib/recovery-session';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+const VERIFY_TIMEOUT_MS = 12_000;
+
+const LINK_EXPIRED_MESSAGE =
+  'This link is invalid or has expired. On the sign-in page, enter your email and choose Forgot password? to get a new link.';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -23,25 +29,38 @@ export default function ResetPassword() {
     const supabase = getSupabase();
     let cancelled = false;
 
-    const finishIfRecoverySession = async () => {
-      const { data } = await supabase.auth.getSession();
+    const markReady = () => {
       if (cancelled) return;
-      if (data.session) {
-        setReady(true);
-        setError('');
+      setReady(true);
+      setError('');
+    };
+
+    const verifyRecoverySession = async () => {
+      const hasSession = await establishRecoverySession(supabase);
+      if (cancelled) return;
+      if (hasSession) {
+        markReady();
       }
     };
 
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-        void finishIfRecoverySession();
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        void verifyRecoverySession();
       }
     });
 
-    void finishIfRecoverySession();
+    void verifyRecoverySession();
+
+    const timeout = window.setTimeout(async () => {
+      if (cancelled) return;
+      const { data } = await supabase.auth.getSession();
+      if (cancelled || data.session) return;
+      setError(LINK_EXPIRED_MESSAGE);
+    }, VERIFY_TIMEOUT_MS);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
       listener.subscription.unsubscribe();
     };
   }, []);

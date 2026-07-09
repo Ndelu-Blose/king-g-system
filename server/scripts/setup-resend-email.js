@@ -49,6 +49,8 @@ async function patchAuthConfig(token) {
     `${PRODUCTION_APP_URL}`,
     `${PRODUCTION_APP_URL}/**`,
     `${PRODUCTION_APP_URL}/login`,
+    `${PRODUCTION_APP_URL}/reset-password`,
+    `${PRODUCTION_APP_URL}/reset-password/**`,
     "http://localhost:8080/**",
     "http://localhost:8081/**",
   ].join(",");
@@ -63,7 +65,10 @@ async function patchAuthConfig(token) {
     smtp_user: "resend",
     smtp_pass: RESEND_API_KEY,
     smtp_sender_name: "King G",
-    hook_send_email_enabled: false,
+    // Branded templates via edge function (all Supabase Auth emails).
+    hook_send_email_enabled: true,
+    hook_send_email_uri: functionUrl,
+    hook_send_email_secrets: hookSecret,
   };
 
   const res = await fetch(
@@ -87,7 +92,7 @@ async function patchAuthConfig(token) {
 async function main() {
   console.log("Setting Supabase secrets…");
   execSync(
-    `npx supabase secrets set RESEND_API_KEY="${RESEND_API_KEY}" RESEND_FROM_EMAIL="${FROM_EMAIL}" SEND_EMAIL_HOOK_SECRET="${hookSecret}" RESEND_FROM_NAME="King G"`,
+    `npx supabase secrets set RESEND_API_KEY="${RESEND_API_KEY}" RESEND_FROM_EMAIL="${FROM_EMAIL}" SEND_EMAIL_HOOK_SECRET="${hookSecret}" RESEND_FROM_NAME="King G" APP_URL="${PRODUCTION_APP_URL}"`,
     { stdio: "inherit", cwd: path.resolve(__dirname, "../..") },
   );
 
@@ -98,10 +103,12 @@ async function main() {
   });
 
   const token = getAccessToken();
-  console.log("Enabling Resend SMTP for Supabase Auth…");
+  console.log("Enabling branded King G auth email hook (Resend)…");
   await patchAuthConfig(token);
 
-  console.log("Done. King G auth emails now use Resend SMTP.");
+  console.log("Done. All King G auth emails now use the branded Resend templates.");
+  console.log(`  Hook URL: ${functionUrl}`);
+  console.log("  Re-run after template changes: deploy auth-send-email, then redeploy API for staff emails.");
 }
 
 main().catch((e) => {

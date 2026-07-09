@@ -25,6 +25,8 @@ export interface IncidentRecord {
   reportedAt: string;
   reportedBy?: string;
   location?: string;
+  attachmentName?: string;
+  attachmentStoragePath?: string;
   resolved: boolean;
   resolvedAt?: string;
   resolvedNotes?: string;
@@ -101,12 +103,12 @@ export function getIncidents(): IncidentRecord[] {
 }
 
 export function addIncident(
-  input: Omit<IncidentRecord, 'id' | 'reportedAt' | 'resolved'>
+  input: Omit<IncidentRecord, 'id' | 'reportedAt' | 'resolved'> & { id?: string }
 ): IncidentRecord {
   const list = loadIncidents();
   const record: IncidentRecord = {
     ...input,
-    id: `inc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+    id: input.id ?? `inc_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
     reportedAt: new Date().toISOString(),
     resolved: false,
   };

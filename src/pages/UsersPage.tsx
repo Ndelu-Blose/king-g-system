@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { KeyRound, Mail, MoreHorizontal, Plus, Trash2, UserCheck, UserX } from 'lucide-react';
+import { KeyRound, Loader2, Mail, MoreHorizontal, Plus, Trash2, UserCheck, UserX } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/ui/button';
 import {
@@ -68,6 +68,13 @@ export default function UsersPage() {
   const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
   const [toggleTarget, setToggleTarget] = useState<{ user: ManagedUser; activate: boolean } | null>(null);
 
+  const [adding, setAdding] = useState(false);
+  const [sendingWelcomeId, setSendingWelcomeId] = useState<string | null>(null);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [togglingActive, setTogglingActive] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [savingRoleId, setSavingRoleId] = useState<string | null>(null);
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
@@ -93,6 +100,7 @@ export default function UsersPage() {
   }, [loadUsers, currentUser]);
 
   const handleAddUser = async () => {
+    if (adding) return;
     const name = addForm.name.trim();
     const email = addForm.email.trim();
     const password = addForm.password;
@@ -109,6 +117,7 @@ export default function UsersPage() {
       return;
     }
     try {
+      setAdding(true);
       const created = await createUser({ name, email, role: addForm.role, password });
       if (created.emailSent) {
         toast.success(`"${name}" added. Welcome email sent to ${email}.`);
@@ -120,67 +129,85 @@ export default function UsersPage() {
       await loadUsers();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add user');
+    } finally {
+      setAdding(false);
     }
   };
 
   const handleSendWelcome = async (target: ManagedUser) => {
+    if (sendingWelcomeId) return;
     try {
+      setSendingWelcomeId(target.id);
       await sendUserWelcomeEmail(target.id);
       toast.success(`Welcome email sent to ${target.email}.`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to send welcome email');
+    } finally {
+      setSendingWelcomeId(null);
     }
   };
 
   const handleChangePassword = async () => {
-    if (!passwordTarget) return;
+    if (!passwordTarget || savingPassword) return;
     if (newPassword.length < 6) {
       toast.error('Password must be at least 6 characters.');
       return;
     }
     try {
+      setSavingPassword(true);
       await changeUserPassword(passwordTarget.id, newPassword);
       toast.success(`Password updated for ${passwordTarget.name}.`);
       setPasswordTarget(null);
       setNewPassword('');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to change password');
+    } finally {
+      setSavingPassword(false);
     }
   };
 
   const handleToggleActive = async () => {
-    if (!toggleTarget) return;
+    if (!toggleTarget || togglingActive) return;
     const { user: target, activate } = toggleTarget;
     try {
+      setTogglingActive(true);
       await updateUser(target.id, { active: activate });
       toast.success(activate ? `${target.name} reactivated.` : `${target.name} deactivated.`);
       setToggleTarget(null);
       await loadUsers();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to update status');
+    } finally {
+      setTogglingActive(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || deleting) return;
     try {
+      setDeleting(true);
       await deleteUser(deleteTarget.id);
       toast.success(`${deleteTarget.name} deleted.`);
       setDeleteTarget(null);
       await loadUsers();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to delete user');
+    } finally {
+      setDeleting(false);
     }
   };
 
   const handleRoleChange = async (target: ManagedUser, role: UserRole) => {
-    if (role === target.role) return;
+    if (role === target.role || savingRoleId) return;
     try {
+      setSavingRoleId(target.id);
       await updateUser(target.id, { role });
       toast.success(`Role updated for ${target.name}.`);
       await loadUsers();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to update role');
+    } finally {
+      setSavingRoleId(null);
     }
   };
 
@@ -253,7 +280,7 @@ export default function UsersPage() {
                     <Select
                       value={u.role}
                       onValueChange={(v) => handleRoleChange(u, v as UserRole)}
-                      disabled={isSelf(u.id)}
+                      disabled={isSelf(u.id) || savingRoleId === u.id}
                     >
                       <SelectTrigger className="w-[160px] h-8 text-xs">
                         <SelectValue />
@@ -295,9 +322,12 @@ export default function UsersPage() {
                           <KeyRound className="w-4 h-4 mr-2" />
                           Change password
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleSendWelcome(u)}>
+                        <DropdownMenuItem
+                          onClick={() => handleSendWelcome(u)}
+                          disabled={sendingWelcomeId === u.id}
+                        >
                           <Mail className="w-4 h-4 mr-2" />
-                          Send welcome email
+                          {sendingWelcomeId === u.id ? 'Sending…' : 'Send welcome email'}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {u.active ? (
@@ -391,8 +421,15 @@ export default function UsersPage() {
             <Button variant="secondary" onClick={() => setAddOpen(false)}>
               Cancel
             </Button>
-            <Button className="gold-gradient text-primary-foreground" onClick={handleAddUser}>
-              Add user
+            <Button className="gold-gradient text-primary-foreground" onClick={handleAddUser} disabled={adding}>
+              {adding ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating…
+                </>
+              ) : (
+                'Add user'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -428,8 +465,19 @@ export default function UsersPage() {
             <Button variant="secondary" onClick={() => setPasswordTarget(null)}>
               Cancel
             </Button>
-            <Button className="gold-gradient text-primary-foreground" onClick={handleChangePassword}>
-              Save password
+            <Button
+              className="gold-gradient text-primary-foreground"
+              onClick={handleChangePassword}
+              disabled={savingPassword}
+            >
+              {savingPassword ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                'Save password'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -449,8 +497,8 @@ export default function UsersPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleToggleActive}>
-              {toggleTarget?.activate ? 'Reactivate' : 'Deactivate'}
+            <AlertDialogAction onClick={handleToggleActive} disabled={togglingActive}>
+              {togglingActive ? 'Processing…' : toggleTarget?.activate ? 'Reactivate' : 'Deactivate'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -470,8 +518,9 @@ export default function UsersPage() {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleDelete}
+              disabled={deleting}
             >
-              Delete
+              {deleting ? 'Deleting…' : 'Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

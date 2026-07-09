@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, Loader2 } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
 import { useInventory } from '@/contexts/InventoryContext';
 import type { StockLocation } from '@/contexts/InventoryContext';
@@ -24,6 +24,7 @@ export default function TransferStock() {
   const [qty, setQty] = useState('');
   const [reason, setReason] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [transferring, setTransferring] = useState(false);
 
   const product = inventory.find((i) => i.productId === productId);
   const fromQty = product
@@ -38,13 +39,22 @@ export default function TransferStock() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!productId || !validQty || !validLocations) return;
-    transferStock(productId, qtyNum, fromLocation, toLocation);
-    setSubmitted(true);
-    setProductId('');
-    setQty('');
-    setReason('');
-    toast.success(`${qtyNum} unit(s) transferred from ${fromLocation} to ${toLocation}.`);
+    if (transferring) return;
+    if (!productId || !validQty || !validLocations) {
+      toast.error('Select a product, valid quantity, and different locations.');
+      return;
+    }
+    setTransferring(true);
+    try {
+      transferStock(productId, qtyNum, fromLocation, toLocation);
+      setSubmitted(true);
+      setProductId('');
+      setQty('');
+      setReason('');
+      toast.success(`${qtyNum} unit(s) transferred from ${fromLocation} to ${toLocation}.`);
+    } finally {
+      setTransferring(false);
+    }
   };
 
   return (
@@ -160,8 +170,8 @@ export default function TransferStock() {
           {!validLocations && (
             <p className="text-sm text-destructive">From and To must be different.</p>
           )}
-          <Button type="submit" disabled={!productId || !validQty || !validLocations}>
-            Transfer
+          <Button type="submit" disabled={!productId || !validQty || !validLocations || transferring}>
+            {transferring ? 'Transferring…' : 'Transfer'}
           </Button>
         </form>
       )}
