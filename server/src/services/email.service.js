@@ -10,12 +10,12 @@ import {
 
 const DEBUG_LOG = (location, message, data, hypothesisId) => {
   // #region agent log
-  fetch("http://127.0.0.1:7617/ingest/fe06f2ec-2a83-4b03-b45f-cadf002a9913", {
+  fetch("http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "a458c3" },
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cbab8b" },
     body: JSON.stringify({
-      sessionId: "a458c3",
-      runId: "email-debug",
+      sessionId: "cbab8b",
+      runId: "email-url-debug",
       hypothesisId,
       location,
       message,
@@ -29,10 +29,36 @@ const DEBUG_LOG = (location, message, data, hypothesisId) => {
 const RESEND_API_KEY = process.env.RESEND_API_KEY?.trim() || "";
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev";
 const FROM_NAME = process.env.RESEND_FROM_NAME?.trim() || "King G";
-const APP_URL = (process.env.APP_URL || process.env.VITE_APP_URL || "http://localhost:8080").replace(
+const PRODUCTION_APP_URL = "https://king-g-system.vercel.app";
+const RAW_APP_URL = (process.env.APP_URL || process.env.VITE_APP_URL || PRODUCTION_APP_URL).replace(
   /\/$/,
   "",
 );
+// Never put localhost in outbound emails — production API may omit APP_URL.
+const APP_URL = (() => {
+  try {
+    const host = new URL(RAW_APP_URL).hostname;
+    if (/^(localhost|127\.0\.0\.1)$/i.test(host)) return PRODUCTION_APP_URL;
+  } catch {
+    return PRODUCTION_APP_URL;
+  }
+  return RAW_APP_URL;
+})();
+
+// #region agent log
+DEBUG_LOG(
+  "email.service.js:init",
+  "APP_URL resolved at module load",
+  {
+    hasEnvAppUrl: Boolean((process.env.APP_URL || "").trim()),
+    hasViteAppUrl: Boolean((process.env.VITE_APP_URL || "").trim()),
+    rawAppUrl: RAW_APP_URL,
+    resolvedAppUrl: APP_URL,
+    isLocalFallback: /localhost|127\.0\.0\.1/i.test(APP_URL),
+  },
+  "A",
+);
+// #endregion
 
 const LOCAL_HOST_RE = /^(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
@@ -48,20 +74,57 @@ export function isLocalAppHost(hostname) {
 export function getPasswordResetRedirectUrl(redirectTo) {
   const defaultUrl = `${APP_URL}/reset-password`;
   const target = String(redirectTo || "").trim();
+  let resolved = defaultUrl;
   if (target && /^https?:\/\//i.test(target)) {
     try {
       const url = new URL(target);
       const appUrl = new URL(APP_URL);
       const appIsProduction = !isLocalAppHost(appUrl.hostname);
       if (appIsProduction && isLocalAppHost(url.hostname)) {
-        return defaultUrl;
+        resolved = defaultUrl;
+      } else if (isLocalAppHost(url.hostname)) {
+        // Never emit localhost links in emails — always use production app URL.
+        resolved = `${PRODUCTION_APP_URL}/reset-password`;
+      } else {
+        resolved = target;
       }
-      return target;
     } catch {
-      /* fall through */
+      resolved = defaultUrl;
     }
   }
-  return defaultUrl;
+  // #region agent log
+  DEBUG_LOG(
+    "email.service.js:getPasswordResetRedirectUrl",
+    "resolved password reset redirect",
+    {
+      hasRedirectTo: Boolean(target),
+      redirectHost: (() => {
+        try {
+          return target ? new URL(target).hostname : null;
+        } catch {
+          return "invalid";
+        }
+      })(),
+      appUrlHost: (() => {
+        try {
+          return new URL(APP_URL).hostname;
+        } catch {
+          return "invalid";
+        }
+      })(),
+      resolvedHost: (() => {
+        try {
+          return new URL(resolved).hostname;
+        } catch {
+          return "invalid";
+        }
+      })(),
+      usesLocalhost: /localhost|127\.0\.0\.1/i.test(resolved),
+    },
+    "B",
+  );
+  // #endregion
+  return resolved;
 }
 
 async function sendViaResend({ to, subject, html, text }) {
@@ -127,6 +190,24 @@ export async function sendPasswordResetEmail(email, options = {}) {
   }
 
   const link = await generateRecoveryLink(normalized, options.redirectTo);
+  // #region agent log
+  DEBUG_LOG(
+    "email.service.js:sendPasswordResetEmail",
+    "sending reset email",
+    {
+      linkHost: (() => {
+        try {
+          return new URL(link).hostname;
+        } catch {
+          return "invalid";
+        }
+      })(),
+      footerAppUrl: APP_URL,
+      footerIsLocal: /localhost|127\.0\.0\.1/i.test(APP_URL),
+    },
+    "C",
+  );
+  // #endregion
   const html = buildPasswordResetEmail({
     name: options.name,
     link,
@@ -163,6 +244,24 @@ export async function sendWelcomeEmail({ email, name, role }) {
   const roleLabel = String(role || "staff").replace(/_/g, " ");
 
   const link = await generateRecoveryLink(normalized);
+  // #region agent log
+  DEBUG_LOG(
+    "email.service.js:sendWelcomeEmail",
+    "sending welcome email",
+    {
+      linkHost: (() => {
+        try {
+          return new URL(link).hostname;
+        } catch {
+          return "invalid";
+        }
+      })(),
+      footerAppUrl: APP_URL,
+      footerIsLocal: /localhost|127\.0\.0\.1/i.test(APP_URL),
+    },
+    "D",
+  );
+  // #endregion
   const html = buildWelcomeEmail({
     name: displayName,
     role: roleLabel,
