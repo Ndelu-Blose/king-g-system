@@ -29,17 +29,18 @@ export default function ResetPassword() {
     const supabase = getSupabase();
     let cancelled = false;
 
-    const markReady = () => {
-      if (cancelled) return;
-      setReady(true);
-      setError('');
-    };
-
     const verifyRecoverySession = async () => {
+      // #region agent log
+      fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'reset-verify',hypothesisId:'G',location:'ResetPassword.tsx:verify',message:'verify start',data:{cancelled,hashLen:window.location.hash.length},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       const hasSession = await establishRecoverySession(supabase);
-      if (cancelled) return;
+      // #region agent log
+      fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'reset-verify',hypothesisId:'G',location:'ResetPassword.tsx:verify',message:'verify result',data:{hasSession,cancelled},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      // Always mark ready when a session exists — Strict Mode remounts must not drop success.
       if (hasSession) {
-        markReady();
+        setReady(true);
+        setError('');
       }
     };
 
