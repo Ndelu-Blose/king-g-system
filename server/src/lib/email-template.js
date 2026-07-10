@@ -229,6 +229,7 @@ export const KING_G_EMAIL_SUBJECTS = {
   welcome: "Welcome to King G — set your password",
   recovery: "Reset your King G password",
   passwordChanged: "Your King G password was changed",
+  password_changed_notification: "Your King G password was changed",
   signup: "Confirm your King G account",
   invite: "You have been invited to King G",
   magiclink: "Your King G sign-in link",
@@ -322,6 +323,19 @@ export function buildAuthActionEmail({ action, confirmationUrl, token, appUrl })
         securityNote: "Never share this code with anyone. King G staff will never ask for it.",
         appUrl,
       });
+    case "password_changed_notification":
+      return renderKingGEmail({
+        ...common,
+        previewText: "Your King G password was changed.",
+        headline: "Your password was updated",
+        paragraphs: [
+          "The password on your King G account was changed.",
+          "If you authorised this change, you can sign in with your new credentials. If this was unexpected, reset your password immediately and notify an owner.",
+        ],
+        ctaLabel: "Sign in to King G",
+        securityNote:
+          "Treat unexpected password changes as urgent. Contact a system owner if you believe your account may be compromised.",
+      });
     default:
       return renderKingGEmail({
         ...common,
@@ -352,6 +366,8 @@ export function buildAuthActionPlainText({ action, confirmationUrl, token, appUr
                 ? "Verify your new email"
                 : action === "reauthentication"
                   ? "Verification required"
+                  : action === "password_changed_notification"
+                    ? "Your password was updated"
                   : "Account notification";
 
   const paragraphsByAction = {
@@ -365,6 +381,10 @@ export function buildAuthActionPlainText({ action, confirmationUrl, token, appUr
     email_change: ["Confirm the email change on your King G account using the link below."],
     email_change_new: ["Verify this email address to complete your King G account update."],
     reauthentication: [`Your verification code is: ${token || ""}`],
+    password_changed_notification: [
+      "The password on your King G account was changed.",
+      "If this was unexpected, reset your password and notify an owner.",
+    ],
   };
 
   const ctaByAction = {
@@ -374,6 +394,7 @@ export function buildAuthActionPlainText({ action, confirmationUrl, token, appUr
     magiclink: "Sign in securely",
     email_change: "Confirm new email",
     email_change_new: "Verify email address",
+    password_changed_notification: "Sign in to King G",
   };
 
   return renderPlainText({

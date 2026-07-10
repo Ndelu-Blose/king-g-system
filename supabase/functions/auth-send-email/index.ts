@@ -23,10 +23,34 @@ function confirmationUrl(emailData: {
   email_action_type: string;
   redirect_to: string;
 }) {
+  // #region agent log
+  console.log(
+    JSON.stringify({
+      sessionId: "cbab8b",
+      hypothesisId: "E",
+      location: "auth-send-email:confirmationUrl",
+      message: "building confirmation url",
+      data: {
+        action: emailData.email_action_type,
+        hasTokenHash: Boolean(emailData.token_hash),
+        redirectTo: emailData.redirect_to || null,
+      },
+      timestamp: Date.now(),
+    }),
+  );
+  // #endregion
+
+  // Notification-only actions have no token — never send users to /verify with an empty token.
+  if (!emailData.token_hash || emailData.email_action_type === "password_changed_notification") {
+    const redirect = (emailData.redirect_to || appUrl).replace(/\/$/, "");
+    if (/reset-password/i.test(redirect)) return redirect;
+    return `${appUrl}/login`;
+  }
+
   const params = new URLSearchParams({
     token: emailData.token_hash,
     type: emailData.email_action_type,
-    redirect_to: emailData.redirect_to,
+    redirect_to: emailData.redirect_to || appUrl,
   });
   return `https://${projectRef}.supabase.co/auth/v1/verify?${params.toString()}`;
 }
