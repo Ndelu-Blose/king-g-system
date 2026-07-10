@@ -29,14 +29,14 @@ export async function establishRecoverySession(supabase: SupabaseClient): Promis
   // #region agent log
   const hashLen = (typeof window !== 'undefined' ? window.location.hash : '').length;
   const hasCode = Boolean(typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('code'));
-  fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'reset-verify',hypothesisId:'G',location:'recovery-session.ts:establishRecoverySession',message:'establish start',data:{hashLen,hasCode,path:typeof window!=='undefined'?window.location.pathname:null},timestamp:Date.now()})}).catch(()=>{});
+  fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'G',location:'recovery-session.ts:establishRecoverySession',message:'establish start',data:{hashLen,hasCode,path:typeof window!=='undefined'?window.location.pathname:null},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
 
   // Let detectSessionInUrl finish before we read/clear the hash (avoids Strict Mode races).
   const existing = await supabase.auth.getSession();
   if (existing.data.session) {
     // #region agent log
-    fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'reset-verify',hypothesisId:'G',location:'recovery-session.ts:establishRecoverySession',message:'existing session found',data:{hasUser:Boolean(existing.data.session.user)},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'G',location:'recovery-session.ts:establishRecoverySession',message:'existing session found',data:{hasUser:Boolean(existing.data.session.user)},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (typeof window !== 'undefined' && (window.location.hash || new URLSearchParams(window.location.search).get('code'))) {
       cleanRecoveryUrl();
@@ -48,7 +48,7 @@ export async function establishRecoverySession(supabase: SupabaseClient): Promis
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     // #region agent log
-    fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'reset-verify',hypothesisId:'H',location:'recovery-session.ts:exchangeCode',message:'code exchange result',data:{ok:!error,error:error?.message||null},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'H',location:'recovery-session.ts:exchangeCode',message:'code exchange result',data:{ok:!error,error:error?.message||null},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (!error) {
       cleanRecoveryUrl();
@@ -65,7 +65,7 @@ export async function establishRecoverySession(supabase: SupabaseClient): Promis
       refresh_token: refreshToken,
     });
     // #region agent log
-    fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'reset-verify',hypothesisId:'H',location:'recovery-session.ts:setSession',message:'hash setSession result',data:{ok:!error,error:error?.message||null,hashType:hash.get('type')},timestamp:Date.now()})}).catch(()=>{});
+    fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'H',location:'recovery-session.ts:setSession',message:'hash setSession result',data:{ok:!error,error:error?.message||null,hashType:hash.get('type')},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     if (!error) {
       cleanRecoveryUrl();
@@ -76,7 +76,7 @@ export async function establishRecoverySession(supabase: SupabaseClient): Promis
   // One more read after auto-detect / setSession attempts.
   const { data } = await supabase.auth.getSession();
   // #region agent log
-  fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'reset-verify',hypothesisId:'G',location:'recovery-session.ts:final',message:'final session check',data:{hasSession:Boolean(data.session)},timestamp:Date.now()})}).catch(()=>{});
+  fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'G',location:'recovery-session.ts:final',message:'final session check',data:{hasSession:Boolean(data.session)},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
   return Boolean(data.session);
 }
