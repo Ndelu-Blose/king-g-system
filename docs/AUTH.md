@@ -47,6 +47,7 @@ Users & Roles → deactivate (or delete). Deleting removes both the Auth user an
 | `RESEND_API_KEY` | Welcome + password-reset emails from User Management |
 | `RESEND_FROM_EMAIL` | `noreply@kinggeelfs.co.za` (verified in Resend) |
 | `APP_URL` | `https://king-g-system.vercel.app` (links inside emails) |
+| `SENTRY_DSN` | Sentry DSN for **cliveux / king-g-system** |
 
 Check production: `GET https://king-g-api.vercel.app/api/health` should show `"userEmailsReady": true`. If `resend` is false, add `RESEND_API_KEY` on Vercel and redeploy.
 
@@ -57,6 +58,8 @@ Check production: `GET https://king-g-api.vercel.app/api/health` should show `"u
 | `VITE_API_URL` | `https://king-g-api.vercel.app` (no trailing slash) |
 | `VITE_SUPABASE_URL` | Same as `SUPABASE_URL` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon / publishable key |
+| `VITE_SENTRY_DSN` | Same DSN as API (public client key) |
+| `SENTRY_AUTH_TOKEN` | Source map upload on build (secret; never commit) |
 
 Redeploy **both** projects after changing env vars.
 

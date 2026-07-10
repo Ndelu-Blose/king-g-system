@@ -176,6 +176,7 @@ On push/PR to `main`, GitHub Actions runs frontend unit tests, backend unit test
 | [SYSTEM.md](./SYSTEM.md) | System overview and roles |
 | [server/README.md](./server/README.md) | API layout and endpoints |
 | [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Vercel and env checklist |
+| [docs/SENTRY.md](./docs/SENTRY.md) | Error monitoring (Vite + Express) |
 | [docs/roles-permissions.md](./docs/roles-permissions.md) | RBAC matrix |
 
 ---

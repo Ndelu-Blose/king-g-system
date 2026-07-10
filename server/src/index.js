@@ -15,6 +15,9 @@ for (const key of REQUIRED_ENV) {
   }
 }
 
+// Initialize Sentry before loading the Express app (ESM-safe).
+await import("./instrument.js");
+
 const { default: app } = await import("./app.js");
 
 const server = app.listen(PORT, () => {

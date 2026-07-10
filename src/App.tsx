@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Sentry } from "@/sentry";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { ShiftProvider } from "@/contexts/ShiftContext";
 import { HappyHourProvider } from "@/contexts/HappyHourContext";
@@ -53,8 +54,10 @@ import IncidentReportsPage from "@/pages/ops/IncidentReportsPage";
 import ApprovalsQueuePage from "@/pages/ops/ApprovalsQueuePage";
 import PromotionsPage from "@/pages/ops/PromotionsPage";
 import NotFound from "./pages/NotFound";
+import SentryExamplePage from "./pages/SentryExamplePage";
 
 const queryClient = new QueryClient();
+const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
 
 function ShiftProviderWrapper({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -79,9 +82,10 @@ const App = () => (
             v7_relativeSplatPath: true,
           }}
         >
-          <Routes>
+          <SentryRoutes>
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/sentry-example-page" element={<SentryExamplePage />} />
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route element={<AppLayout />}>
               <Route path="/dashboard" element={<Dashboard />} />
@@ -128,7 +132,7 @@ const App = () => (
               <Route path="/ops/promotions" element={<PromotionsPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
-          </Routes>
+          </SentryRoutes>
         </BrowserRouter>
         </CartProvider>
         </PurchaseOrderProvider>

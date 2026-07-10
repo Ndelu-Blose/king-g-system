@@ -29,6 +29,11 @@ jobs:
         run: npm run test:unit
 
       - name: Build
+        env:
+          # Optional: upload source maps when secret is configured (plugin no-ops without it)
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: cliveux
+          SENTRY_PROJECT: king-g-system
         run: npm run build
 
   backend-unit:

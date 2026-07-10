@@ -12,6 +12,7 @@
     "test:integration": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand workflows.test.js"
   },
   "dependencies": {
+    "@sentry/node": "^10.65.0",
     "@supabase/supabase-js": "^2.57.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",

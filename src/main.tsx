@@ -1,7 +1,10 @@
+import { initSentry } from "./sentry";
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
+
+initSentry();
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {

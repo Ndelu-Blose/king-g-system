@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
+import "./instrument.js";
+import * as Sentry from "@sentry/node";
 
 import { loginHandler, meHandler, requestPasswordResetHandler, updateProfileHandler, changePasswordHandler, authMiddleware } from "../auth.js";
 import { requirePermission, requireAuth } from "../permissions.js";
@@ -674,6 +676,11 @@ export function createApp() {
   app.get("/health", (_req, res) => res.json({ ok: true, ...getServerCapabilities() }));
   app.get("/api/health", (_req, res) => res.json({ ok: true, ...getServerCapabilities() }));
 
+  // Temporary: verify Sentry API capture (remove after confirming Issues)
+  app.get("/api/debug-sentry", (_req, _res) => {
+    throw new Error("King G API Sentry example error");
+  });
+
   // --- Reports (Supabase-backed; optional during migration) ---
   app.get("/api/reports", async (req, res) => {
     try {
@@ -684,6 +691,8 @@ export function createApp() {
       return sendError(res, "GET /api/reports", e, { fallback: "Failed to load reports" });
     }
   });
+
+  Sentry.setupExpressErrorHandler(app);
 
   return app;
 }
