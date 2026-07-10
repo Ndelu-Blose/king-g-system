@@ -29,24 +29,35 @@ export default function ResetPassword() {
     const supabase = getSupabase();
     let cancelled = false;
 
+    const markReady = () => {
+      setReady(true);
+      setError('');
+    };
+
     const verifyRecoverySession = async () => {
       // #region agent log
-      fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'G',location:'ResetPassword.tsx:verify',message:'verify start',data:{cancelled,hashLen:window.location.hash.length},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'K',location:'ResetPassword.tsx:verify',message:'verify start',data:{cancelled,hashLen:window.location.hash.length},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       const hasSession = await establishRecoverySession(supabase);
       // #region agent log
-      fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'G',location:'ResetPassword.tsx:verify',message:'verify result',data:{hasSession,cancelled,willSetReady:Boolean(hasSession)},timestamp:Date.now()})}).catch(()=>{});
+      fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'K',location:'ResetPassword.tsx:verify',message:'verify result',data:{hasSession,cancelled,willSetReady:Boolean(hasSession)},timestamp:Date.now()})}).catch(()=>{});
       // #endregion
       // Always mark ready when a session exists — Strict Mode remounts must not drop success.
-      if (hasSession) {
-        setReady(true);
-        setError('');
-      }
+      if (hasSession) markReady();
     };
 
-    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        void verifyRecoverySession();
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      // #region agent log
+      fetch('http://127.0.0.1:7353/ingest/efb20fee-084f-4ea9-9b4d-77b55a4189a3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'cbab8b'},body:JSON.stringify({sessionId:'cbab8b',runId:'post-fix',hypothesisId:'K',location:'ResetPassword.tsx:onAuthStateChange',message:'auth event',data:{event,hasSession:Boolean(session)},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (
+        session &&
+        (event === 'PASSWORD_RECOVERY' ||
+          event === 'SIGNED_IN' ||
+          event === 'INITIAL_SESSION' ||
+          event === 'TOKEN_REFRESHED')
+      ) {
+        markReady();
       }
     });
 
@@ -55,7 +66,11 @@ export default function ResetPassword() {
     const timeout = window.setTimeout(async () => {
       if (cancelled) return;
       const { data } = await supabase.auth.getSession();
-      if (cancelled || data.session) return;
+      if (cancelled) return;
+      if (data.session) {
+        markReady();
+        return;
+      }
       setError(LINK_EXPIRED_MESSAGE);
     }, VERIFY_TIMEOUT_MS);
 
