@@ -795,6 +795,8 @@ export async function createHelpRequest({ cashierId, cashierName, message = "" }
     created_at: createdAt,
     acknowledged_at: null,
     acknowledged_by: null,
+    is_read: false,
+    read_at: null,
   };
 
   const { error: insErr } = await client.from("help_requests").insert(row);
@@ -818,6 +820,8 @@ export async function getHelpRequests(status = null) {
     createdAt: r.created_at,
     acknowledgedAt: r.acknowledged_at,
     acknowledgedBy: r.acknowledged_by,
+    isRead: Boolean(r.is_read),
+    readAt: r.read_at ?? null,
   }));
 }
 
@@ -838,7 +842,13 @@ export async function markHelpRequestAcknowledged(id, acknowledgedBy) {
   const now = new Date().toISOString();
   const { error } = await client
     .from("help_requests")
-    .update({ status: "acknowledged", acknowledged_at: now, acknowledged_by: acknowledgedBy })
+    .update({
+      status: "acknowledged",
+      acknowledged_at: now,
+      acknowledged_by: acknowledgedBy,
+      is_read: true,
+      read_at: now,
+    })
     .eq("id", id);
   if (error) throw error;
   return { ok: true };

@@ -210,6 +210,7 @@ export async function createUser({ name, email, role, password }, { idempotencyK
       });
       emailSent = true;
     } catch (err) {
+      // Already reported to Sentry in email.service (tags: service=email). Keep user create.
       emailError = err instanceof Error ? err.message : String(err);
       console.error("Welcome email failed:", emailError);
     }
@@ -518,6 +519,7 @@ export async function updateUserPassword(id, password) {
       try {
         await sendPasswordChangedEmail({ email: current.email, name: current.name });
       } catch (emailError) {
+        // Already reported to Sentry in email.service. Password update still succeeds.
         console.error("Password-changed email failed:", emailError?.message || emailError);
       }
     }

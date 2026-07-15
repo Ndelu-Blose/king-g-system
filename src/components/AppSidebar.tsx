@@ -42,7 +42,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getHelpRequests, getLocalHelpRequests } from '@/lib/pos-api';
+import { getUnreadNotificationCount } from '@/lib/pos-api';
 
 interface NavItem {
   label: string;
@@ -187,18 +187,19 @@ export default function AppSidebar() {
     setOpenSections((prev) => ({ ...prev, [title]: !prev[title] }));
   };
 
-  const { data: helpRequestsData } = useQuery({
-    queryKey: ['help-requests', 'count'],
+  const { data: unreadNotificationCount = 0 } = useQuery({
+    queryKey: ['notifications', 'unread-count'],
     queryFn: async () => {
-      const api = (await getHelpRequests('pending')) ?? [];
-      const local = getLocalHelpRequests().filter((r) => r.status === 'pending');
-      return [...local, ...api];
+      try {
+        return await getUnreadNotificationCount();
+      } catch {
+        return 0;
+      }
     },
     refetchInterval: 5000,
     staleTime: 2000,
     enabled: isOwner || isManager,
   });
-  const unreadNotificationCount = Array.isArray(helpRequestsData) ? helpRequestsData.length : 0;
 
   useEffect(() => {
     if (isCashier && !shift.isOpen && (pathname === '/pos' || pathname.startsWith('/pos/'))) {

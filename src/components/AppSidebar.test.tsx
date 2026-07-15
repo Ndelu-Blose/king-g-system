@@ -16,6 +16,7 @@ vi.mock("@/contexts/ShiftContext", () => ({
 vi.mock("@/lib/pos-api", () => ({
   getHelpRequests: vi.fn(async () => []),
   getLocalHelpRequests: vi.fn(() => []),
+  getUnreadNotificationCount: vi.fn(async () => 0),
 }));
 
 const { useAuth } = await import("@/lib/auth-context");

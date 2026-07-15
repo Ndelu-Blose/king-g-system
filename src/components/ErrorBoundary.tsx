@@ -5,10 +5,10 @@ interface Props {
   children: ReactNode;
 }
 
-function FallbackUI({ error, resetError }: { error: unknown; resetError: () => void }) {
-  const message = error instanceof Error ? error.message : "An error occurred.";
+function FallbackUI({ resetError }: { resetError: () => void }) {
   return (
     <div
+      role="alert"
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -22,7 +22,9 @@ function FallbackUI({ error, resetError }: { error: unknown; resetError: () => v
     >
       <div style={{ maxWidth: "28rem", textAlign: "center" }}>
         <h1 style={{ fontSize: "1.5rem", marginBottom: "0.5rem" }}>Something went wrong</h1>
-        <p style={{ color: "hsl(220 10% 55%)", marginBottom: "1rem" }}>{message}</p>
+        <p style={{ color: "hsl(220 10% 55%)", marginBottom: "1rem" }}>
+          Please refresh the page and try again.
+        </p>
         <button
           type="button"
           onClick={() => {
@@ -48,7 +50,7 @@ function FallbackUI({ error, resetError }: { error: unknown; resetError: () => v
 
 export function ErrorBoundary({ children }: Props) {
   return (
-    <Sentry.ErrorBoundary fallback={({ error, resetError }) => <FallbackUI error={error} resetError={resetError} />}>
+    <Sentry.ErrorBoundary fallback={({ resetError }) => <FallbackUI resetError={resetError} />}>
       {children}
     </Sentry.ErrorBoundary>
   );

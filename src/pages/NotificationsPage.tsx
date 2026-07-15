@@ -1,355 +1,444 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, AlertTriangle, Package, TrendingDown, Phone, Check } from 'lucide-react';
+import {
+  Bell,
+  AlertTriangle,
+  Package,
+  TrendingDown,
+  Phone,
+  Check,
+  MoreHorizontal,
+  Inbox,
+} from 'lucide-react';
+import { format, isToday, isYesterday } from 'date-fns';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import {
-  getHelpRequests,
+  getNotifications,
   getLocalHelpRequests,
   acknowledgeHelpRequest,
-  getTransactionsFromApi,
-  type HelpRequest,
+  markNotificationRead,
+  markNotificationUnread,
+  markAllNotificationsRead,
+  type AppNotification,
+  type NotificationType,
 } from '@/lib/pos-api';
 import { useAuth } from '@/lib/auth-context';
-import { useInventory } from '@/contexts/InventoryContext';
 import { BackButton } from '@/components/BackButton';
-import { getDiscrepancies } from '@/lib/ops-store';
 
-const SYSTEM_SETTINGS_KEY = 'kingg-system-settings';
-const ALERT_READ_IDS_KEY = 'kingg_alert_read_ids';
-const VOID_REFUND_ALERT_THRESHOLD = 2;
+type FilterTab = 'all' | 'unread' | 'help' | 'stock';
 
-type AlertType = 'low_stock' | 'variance' | 'unusual';
+const FILTER_TABS: { id: FilterTab; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'unread', label: 'Unread' },
+  { id: 'help', label: 'Help Requests' },
+  { id: 'stock', label: 'Stock Alerts' },
+];
 
-interface Alert {
+function localHelpToNotification(h: {
   id: string;
-  type: AlertType;
-  title: string;
-  message: string;
-  time: string;
-  read: boolean;
+  cashierId: string;
+  cashierName: string;
+  message: string | null;
+  status: string;
+  createdAt: string;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  isRead?: boolean;
+  readAt?: string | null;
+}): AppNotification {
+  return {
+    id: h.id,
+    type: 'help_request',
+    category: 'Help Requests',
+    title: `${h.cashierName || h.cashierId} requested help`,
+    description: h.message || 'Assistance needed at terminal.',
+    href: '/notifications',
+    isRead: Boolean(h.isRead),
+    readAt: h.readAt ?? null,
+    createdAt: h.createdAt,
+    status: h.status || 'pending',
+    acknowledgedAt: h.acknowledgedAt,
+    acknowledgedBy: h.acknowledgedBy,
+  };
 }
 
-function getLowStockThreshold(): number {
-  try {
-    const raw = localStorage.getItem(SYSTEM_SETTINGS_KEY);
-    if (raw) {
-      const s = JSON.parse(raw);
-      if (typeof s.lowStockThreshold === 'number' && s.lowStockThreshold >= 0) return s.lowStockThreshold;
-    }
-  } catch {
-    // ignore
-  }
-  return 5;
+function formatNotificationWhen(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const time = format(d, 'HH:mm');
+  if (isToday(d)) return `Today, ${time}`;
+  if (isYesterday(d)) return `Yesterday, ${time}`;
+  return format(d, 'd MMMM yyyy, HH:mm');
 }
 
-function loadReadAlertIds(): Set<string> {
-  try {
-    const raw = localStorage.getItem(ALERT_READ_IDS_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      return new Set(Array.isArray(arr) ? arr : []);
-    }
-  } catch {
-    // ignore
-  }
-  return new Set();
+function groupLabel(iso: string): 'Today' | 'Yesterday' | 'Earlier' {
+  const d = new Date(iso);
+  if (isToday(d)) return 'Today';
+  if (isYesterday(d)) return 'Yesterday';
+  return 'Earlier';
 }
 
-function saveReadAlertIds(ids: Set<string>): void {
-  try {
-    localStorage.setItem(ALERT_READ_IDS_KEY, JSON.stringify([...ids]));
-  } catch {
-    // ignore
-  }
-}
-
-function IconForType({ type }: { type: AlertType }) {
+function IconForType({ type }: { type: NotificationType }) {
+  if (type === 'help_request') return <Phone className="h-4 w-4" />;
   if (type === 'low_stock') return <Package className="h-4 w-4" />;
   if (type === 'variance') return <AlertTriangle className="h-4 w-4" />;
   return <TrendingDown className="h-4 w-4" />;
 }
 
-function formatTime(iso: string) {
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins} min ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours} hour(s) ago`;
-  return d.toLocaleString();
+function statusLabel(status: string | null | undefined): string | null {
+  if (!status) return null;
+  const s = status.toLowerCase();
+  if (s === 'pending') return 'Pending';
+  if (s === 'acknowledged') return 'Acknowledged';
+  if (s === 'resolved' || s === 'closed') return 'Resolved';
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function StatusBadge({ status }: { status: string | null | undefined }) {
+  const label = statusLabel(status);
+  if (!label) return null;
+  const tone =
+    label === 'Pending'
+      ? 'border-primary/40 bg-primary/15 text-primary'
+      : label === 'Acknowledged'
+        ? 'border-border bg-muted/40 text-muted-foreground'
+        : 'border-border bg-muted/30 text-muted-foreground';
+  return (
+    <Badge variant="outline" className={cn('text-[10px] font-medium px-1.5 py-0 h-5', tone)}>
+      {label}
+    </Badge>
+  );
 }
 
 export default function NotificationsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { inventory } = useInventory();
-  const [readIds, setReadIds] = useState<Set<string>>(loadReadAlertIds);
-  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterTab>('all');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
-  const threshold = getLowStockThreshold();
-
-  const { data: helpRequestsData } = useQuery({
-    queryKey: ['help-requests'],
+  const { data: notificationsData, isLoading } = useQuery({
+    queryKey: ['notifications'],
     queryFn: async () => {
-      const api = (await getHelpRequests(null)) ?? [];
-      const local = getLocalHelpRequests();
-      const merged = [...local, ...api].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      let api: AppNotification[] = [];
+      try {
+        api = (await getNotifications()) ?? [];
+      } catch {
+        api = [];
+      }
+      const local = getLocalHelpRequests().map(localHelpToNotification);
+      const seen = new Set(api.map((n) => n.id));
+      const merged = [...local.filter((n) => !seen.has(n.id)), ...api];
+      merged.sort((a, b) => {
+        if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
       return merged;
     },
     refetchInterval: 5000,
     staleTime: 2000,
   });
 
-  const { data: transactionsData } = useQuery({
-    queryKey: ['transactions', 'alerts'],
-    queryFn: () => getTransactionsFromApi(null),
-    staleTime: 60_000,
-  });
+  const notifications = Array.isArray(notificationsData) ? notificationsData : [];
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-  const transactions = Array.isArray(transactionsData) ? transactionsData : [];
-  const todayStart = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }, []);
-  const todayVoidRefundCount = useMemo(
-    () =>
-      transactions.filter(
-        (t) =>
-          (t.status === 'void' || t.status === 'refunded') && new Date(t.createdAt).getTime() >= todayStart
-      ).length,
-    [transactions, todayStart]
-  );
-
-  const discrepancies = useMemo(() => getDiscrepancies().filter((r) => !r.resolved), []);
-
-  const alerts = useMemo((): Alert[] => {
-    const list: Alert[] = [];
-    const readSet = readIds;
-
-    // Low stock: from inventory (lounge or warehouse below threshold)
-    inventory
-      .filter((i) => i.loungeQty < threshold || i.warehouseQty < threshold)
-      .slice(0, 10)
-      .forEach((i) => {
-        const loungeLow = i.loungeQty < threshold;
-        const warehouseLow = i.warehouseQty < threshold;
-        const loc = loungeLow && warehouseLow ? 'both' : loungeLow ? 'Lounge' : 'Warehouse';
-        const qty = loungeLow ? i.loungeQty : i.warehouseQty;
-        list.push({
-          id: `low_${i.productId}`,
-          type: 'low_stock',
-          title: 'Low stock',
-          message: `${i.productName} — ${qty} unit${qty !== 1 ? 's' : ''} in ${loc}`,
-          time: 'Current',
-          read: readSet.has(`low_${i.productId}`),
-        });
-      });
-
-    // Variance: open discrepancies (cash or stock)
-    discrepancies.forEach((r) => {
-      list.push({
-        id: `var_${r.id}`,
-        type: 'variance',
-        title: r.type === 'cash' ? 'Cash variance' : 'Stock variance',
-        message: r.description || r.amountOrQty,
-        time: formatTime(r.reportedAt),
-        read: readSet.has(`var_${r.id}`),
-      });
-    });
-
-    // Unusual: high void/refund count today
-    if (todayVoidRefundCount >= VOID_REFUND_ALERT_THRESHOLD) {
-      list.push({
-        id: 'unusual_voids_today',
-        type: 'unusual',
-        title: 'Unusual activity',
-        message: `${todayVoidRefundCount} void/refund${todayVoidRefundCount !== 1 ? 's' : ''} today. Review if needed.`,
-        time: 'Today',
-        read: readSet.has('unusual_voids_today'),
-      });
+  const filtered = useMemo(() => {
+    switch (filter) {
+      case 'unread':
+        return notifications.filter((n) => !n.isRead);
+      case 'help':
+        return notifications.filter((n) => n.type === 'help_request');
+      case 'stock':
+        return notifications.filter((n) => n.type === 'low_stock' || n.type === 'variance');
+      default:
+        return notifications;
     }
+  }, [notifications, filter]);
 
-    return list.sort((a, b) => (a.read === b.read ? 0 : a.read ? 1 : -1));
-  }, [inventory, threshold, discrepancies, todayVoidRefundCount, readIds]);
+  const groups = useMemo(() => {
+    const order: Array<'Today' | 'Yesterday' | 'Earlier'> = ['Today', 'Yesterday', 'Earlier'];
+    const map: Record<string, AppNotification[]> = {
+      Today: [],
+      Yesterday: [],
+      Earlier: [],
+    };
+    for (const n of filtered) {
+      map[groupLabel(n.createdAt)].push(n);
+    }
+    return order
+      .map((label) => ({ label, items: map[label] }))
+      .filter((g) => g.items.length > 0);
+  }, [filtered]);
 
-  const helpRequests = Array.isArray(helpRequestsData) ? helpRequestsData : [];
-  const pendingHelp = helpRequests.filter((r) => r.status === 'pending');
-  const hasLocal = helpRequests.some((r) => r.id.startsWith('local-'));
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    void queryClient.invalidateQueries({ queryKey: ['help-requests'] });
+    void queryClient.invalidateQueries({ queryKey: ['notifications', 'unread-count'] });
+  };
 
-  const handleAcknowledge = async (req: HelpRequest) => {
-    if (acknowledgingId) return;
-    setAcknowledgingId(req.id);
+  const handleMarkRead = async (id: string) => {
+    setBusyId(id);
     try {
-      const ok = await acknowledgeHelpRequest(req.id, user?.name ?? user?.id ?? 'manager');
+      await markNotificationRead(id);
+      invalidate();
+    } catch {
+      toast.error('Failed to mark as read.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleMarkUnread = async (id: string) => {
+    setBusyId(id);
+    try {
+      await markNotificationUnread(id);
+      invalidate();
+    } catch {
+      toast.error('Failed to mark as unread.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    if (unreadCount === 0 || markingAll) return;
+    setMarkingAll(true);
+    try {
+      await markAllNotificationsRead();
+      toast.success('All notifications marked as read.');
+      invalidate();
+    } catch {
+      toast.error('Failed to mark all as read.');
+    } finally {
+      setMarkingAll(false);
+    }
+  };
+
+  const handleAcknowledge = async (n: AppNotification, e?: MouseEvent) => {
+    e?.stopPropagation();
+    if (busyId) return;
+    setBusyId(n.id);
+    try {
+      const ok = await acknowledgeHelpRequest(n.id, user?.name ?? user?.id ?? 'manager');
       if (ok) {
+        await markNotificationRead(n.id);
         toast.success('Help request acknowledged.');
-        void queryClient.invalidateQueries({ queryKey: ['help-requests'] });
+        invalidate();
       } else {
         toast.error('Failed to acknowledge help request.');
       }
     } catch {
       toast.error('Failed to acknowledge help request.');
     } finally {
-      setAcknowledgingId(null);
+      setBusyId(null);
     }
   };
 
-  const markRead = useCallback((id: string) => {
-    setReadIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      saveReadAlertIds(next);
-      return next;
-    });
-  }, []);
-
-  const markAllRead = useCallback(() => {
-    setReadIds((prev) => {
-      const next = new Set(prev);
-      alerts.forEach((a) => next.add(a.id));
-      saveReadAlertIds(next);
-      return next;
-    });
-  }, [alerts]);
-
-  const unreadCount = alerts.filter((a) => !a.read).length;
+  const handleOpen = async (n: AppNotification) => {
+    if (!n.isRead) {
+      try {
+        await markNotificationRead(n.id);
+        invalidate();
+      } catch {
+        // still navigate
+      }
+    }
+    if (n.href && n.href !== '/notifications') {
+      navigate(n.href);
+    }
+  };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5 max-w-3xl">
       <div className="flex items-center gap-4">
         <BackButton />
       </div>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-foreground flex items-center gap-2">
-            <Bell className="h-6 w-6 text-primary" />
-            Notifications / Alerts
-          </h1>
+
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Bell className="h-5 w-5 text-primary shrink-0" />
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+              Notifications
+            </h1>
+            {unreadCount > 0 && (
+              <span className="inline-flex items-center rounded-md bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
+                {unreadCount} unread
+              </span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
-            Cashier help requests, variances, low stock, and unusual activity.
+            Help requests, stock alerts, and operational notices.
           </p>
         </div>
-        {unreadCount > 0 && (
-          <Button variant="outline" size="sm" onClick={markAllRead}>
-            Mark all read
-          </Button>
-        )}
+        <Button
+          variant="default"
+          size="sm"
+          className="shrink-0 self-start"
+          onClick={() => void handleMarkAllRead()}
+          disabled={unreadCount === 0 || markingAll}
+        >
+          {markingAll ? 'Marking…' : 'Mark all as read'}
+        </Button>
+      </header>
+
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+        {FILTER_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setFilter(tab.id)}
+            className={cn(
+              'whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              filter === tab.id
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Help requests from cashiers — managers see these immediately */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
-          <Phone className="h-4 w-4 text-primary" />
-          Help requests
-          {pendingHelp.length > 0 && (
-            <span className="rounded-full bg-primary/20 text-primary px-2 py-0.5 text-xs font-medium">
-              {pendingHelp.length} pending
-            </span>
-          )}
-        </h2>
-        {hasLocal && (
-          <p className="text-xs text-muted-foreground mb-2">
-            Some requests were saved on this device while the server was offline.
+      {isLoading && notifications.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">Loading notifications…</p>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border py-12 px-4 text-center">
+          <Inbox className="h-8 w-8 text-muted-foreground/60" />
+          <p className="text-sm font-medium text-foreground">No notifications</p>
+          <p className="text-xs text-muted-foreground max-w-xs">
+            Nothing matches this filter. New help requests and stock alerts will appear here.
           </p>
-        )}
-        {helpRequests.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 rounded-lg border border-dashed border-border">
-            No help requests. When a cashier taps &quot;Call Manager&quot;, they appear here.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {helpRequests.map((req) => (
-              <div
-                key={req.id}
-                className={cn(
-                  'flex items-start gap-4 rounded-lg border p-4 transition-colors',
-                  req.status === 'pending'
-                    ? 'border-primary/40 bg-primary/10'
-                    : 'border-border bg-muted/20'
-                )}
-              >
-                <div className="rounded-full bg-muted p-2 shrink-0">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground">
-                    {req.cashierName || req.cashierId} requested help
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {req.message || 'Assistance needed at terminal.'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatTime(req.createdAt)}
-                    {req.status === 'acknowledged' && req.acknowledgedBy && (
-                      <span className="ml-2">— Acknowledged by {req.acknowledgedBy}</span>
-                    )}
-                  </p>
-                </div>
-                {req.status === 'pending' && (
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="gap-1.5 shrink-0"
-                    onClick={() => handleAcknowledge(req)}
-                    disabled={acknowledgingId === req.id}
-                  >
-                    <Check className="h-4 w-4" />
-                    {acknowledgingId === req.id ? '…' : 'Acknowledge'}
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <section key={group.label} className="space-y-1.5">
+              <h2 className="text-xs font-medium text-muted-foreground px-1">{group.label}</h2>
+              <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+                {group.items.map((n) => (
+                  <li key={n.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void handleOpen(n)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          void handleOpen(n);
+                        }
+                      }}
+                      className={cn(
+                        'group flex items-start gap-3 px-3 py-2.5 cursor-pointer transition-colors',
+                        n.isRead
+                          ? 'bg-card hover:bg-muted/20'
+                          : 'bg-primary/[0.06] hover:bg-primary/[0.1] border-l-2 border-l-primary'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'mt-0.5 rounded-md p-1.5 shrink-0',
+                          n.isRead ? 'bg-muted/50 text-muted-foreground' : 'bg-muted text-foreground'
+                        )}
+                      >
+                        <IconForType type={n.type} />
+                      </div>
 
-      {/* System alerts: low stock, variances, unusual activity */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-          System alerts
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Low stock (from inventory), open discrepancies, and high void/refund activity today.
-        </p>
-        {alerts.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 rounded-lg border border-dashed border-border">
-            No alerts. When stock is below the threshold, discrepancies are logged, or there are multiple voids/refunds today, they appear here.
-          </p>
-        ) : (
-        <div className="space-y-2">
-          {alerts.map((a) => (
-            <div
-              key={a.id}
-              className={cn(
-                'flex items-start gap-4 rounded-lg border p-4 transition-colors',
-                a.read ? 'border-border bg-card' : 'border-primary/30 bg-primary/5'
-              )}
-            >
-              <div className="rounded-full bg-muted p-2">
-                <IconForType type={a.type} className="text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground">{a.title}</p>
-                <p className="text-sm text-muted-foreground">{a.message}</p>
-                <p className="text-xs text-muted-foreground mt-1">{a.time}</p>
-              </div>
-              {!a.read && (
-                <Button variant="ghost" size="sm" onClick={() => markRead(a.id)}>
-                  Mark read
-                </Button>
-              )}
-            </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-2">
+                          <p
+                            className={cn(
+                              'text-sm text-foreground truncate flex-1',
+                              n.isRead ? 'font-normal text-muted-foreground' : 'font-semibold'
+                            )}
+                          >
+                            {n.title}
+                          </p>
+                          {!n.isRead && (
+                            <span
+                              className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0"
+                              aria-label="Unread"
+                            />
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                          {n.description}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-[11px] text-muted-foreground/80">{n.category}</span>
+                          <span className="text-[11px] text-muted-foreground/50">·</span>
+                          <span className="text-[11px] text-muted-foreground/80 tabular-nums">
+                            {formatNotificationWhen(n.createdAt)}
+                          </span>
+                          {n.type === 'help_request' && <StatusBadge status={n.status} />}
+                        </div>
+                      </div>
+
+                      <div
+                        className="flex items-center gap-1 shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {n.type === 'help_request' && n.status === 'pending' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs hidden sm:inline-flex"
+                            onClick={(e) => void handleAcknowledge(n, e)}
+                            disabled={busyId === n.id}
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            Acknowledge
+                          </Button>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-muted-foreground"
+                              disabled={busyId === n.id}
+                              aria-label="Notification actions"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {n.isRead ? (
+                              <DropdownMenuItem onClick={() => void handleMarkUnread(n.id)}>
+                                Mark as unread
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => void handleMarkRead(n.id)}>
+                                Mark as read
+                              </DropdownMenuItem>
+                            )}
+                            {n.type === 'help_request' && n.status === 'pending' && (
+                              <DropdownMenuItem onClick={() => void handleAcknowledge(n)}>
+                                Acknowledge
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ))}
         </div>
-        )}
-      </section>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import * as pos from "./services/pos.service.js";
 import * as users from "./services/users.service.js";
 import * as receiving from "./services/receiving.service.js";
 import * as deliveries from "./services/deliveries.service.js";
+import * as notifications from "./services/notifications.service.js";
 import { sendError } from "./lib/api-error.js";
 
 const upload = multer({
@@ -296,6 +297,60 @@ export function createApp() {
       res.json({ ok: true });
     } catch (e) {
       return sendError(res, "PATCH /api/help-requests/:id/acknowledge", e, { fallback: "Failed to acknowledge" });
+    }
+  });
+
+  // --- Notifications (unified help + stock/variance alerts) ---
+  app.get("/api/notifications", authMiddleware, requireAuth, async (_req, res) => {
+    try {
+      const list = await notifications.listNotifications();
+      res.json(list);
+    } catch (e) {
+      return sendError(res, "GET /api/notifications", e, { fallback: "Failed to load notifications" });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", authMiddleware, requireAuth, async (_req, res) => {
+    try {
+      const count = await notifications.getUnreadNotificationCount();
+      res.json({ count });
+    } catch (e) {
+      return sendError(res, "GET /api/notifications/unread-count", e, { fallback: "Failed to load unread count" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/read", authMiddleware, requireAuth, async (req, res) => {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: "id required" });
+    try {
+      const result = await notifications.markNotificationRead(id);
+      res.json(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("not found")) return res.status(404).json({ error: msg });
+      return sendError(res, "PATCH /api/notifications/:id/read", e, { fallback: "Failed to mark as read" });
+    }
+  });
+
+  app.patch("/api/notifications/:id/unread", authMiddleware, requireAuth, async (req, res) => {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: "id required" });
+    try {
+      const result = await notifications.markNotificationUnread(id);
+      res.json(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("not found")) return res.status(404).json({ error: msg });
+      return sendError(res, "PATCH /api/notifications/:id/unread", e, { fallback: "Failed to mark as unread" });
+    }
+  });
+
+  app.post("/api/notifications/mark-all-read", authMiddleware, requireAuth, async (_req, res) => {
+    try {
+      const result = await notifications.markAllNotificationsRead();
+      res.json(result);
+    } catch (e) {
+      return sendError(res, "POST /api/notifications/mark-all-read", e, { fallback: "Failed to mark all as read" });
     }
   });
 
@@ -693,6 +748,15 @@ export function createApp() {
   });
 
   Sentry.setupExpressErrorHandler(app);
+
+  // Final handler after Sentry — safe JSON response (no stack / request body)
+  app.use((error, _request, response, _next) => {
+    console.error(error);
+    if (response.headersSent) return;
+    response.status(500).json({
+      error: "Internal server error",
+    });
+  });
 
   return app;
 }

@@ -156,6 +156,19 @@ async function apiDelete<T>(path: string): Promise<T> {
   return res.json();
 }
 
+async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { error?: string }).error || `API ${res.status}`);
+  }
+  return res.json();
+}
+
 export type ProductInput = {
   name: string;
   barcode: string;
@@ -1033,6 +1046,8 @@ function saveHelpRequestLocal(payload: HelpRequestPayload): { id: string; create
     createdAt,
     acknowledgedAt: null,
     acknowledgedBy: null,
+    isRead: false,
+    readAt: null,
   };
   try {
     const raw = localStorage.getItem(LOCAL_HELP_KEY);
@@ -1088,6 +1103,8 @@ export async function createHelpRequest(payload: HelpRequestPayload): Promise<{ 
     created_at: createdAt,
     acknowledged_at: null,
     acknowledged_by: null,
+    is_read: false,
+    read_at: null,
   });
 
   if (error) throw new Error(error.message);
@@ -1101,6 +1118,27 @@ export interface HelpRequest {
   message: string | null;
   status: string;
   createdAt: string;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  isRead?: boolean;
+  readAt?: string | null;
+}
+
+export type NotificationType = 'help_request' | 'low_stock' | 'variance' | 'unusual';
+
+export type NotificationStatus = 'pending' | 'acknowledged' | 'resolved' | null;
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  category: string;
+  title: string;
+  description: string;
+  href: string;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+  status: NotificationStatus | string | null;
   acknowledgedAt: string | null;
   acknowledgedBy: string | null;
 }
@@ -1133,7 +1171,67 @@ export async function getHelpRequests(status?: string | null): Promise<HelpReque
     createdAt: r.created_at,
     acknowledgedAt: r.acknowledged_at,
     acknowledgedBy: r.acknowledged_by,
+    isRead: Boolean(r.is_read),
+    readAt: r.read_at ?? null,
   }));
+}
+
+export async function getNotifications(): Promise<AppNotification[]> {
+  return apiGet<AppNotification[]>('/api/notifications');
+}
+
+export async function getUnreadNotificationCount(): Promise<number> {
+  const res = await apiGet<{ count: number }>('/api/notifications/unread-count');
+  return res.count;
+}
+
+export async function markNotificationRead(id: string): Promise<boolean> {
+  if (id.startsWith('local-')) {
+    updateLocalHelpReadState(id, true);
+    return true;
+  }
+  await apiPatch<{ ok: boolean }>(`/api/notifications/${encodeURIComponent(id)}/read`);
+  return true;
+}
+
+export async function markNotificationUnread(id: string): Promise<boolean> {
+  if (id.startsWith('local-')) {
+    updateLocalHelpReadState(id, false);
+    return true;
+  }
+  await apiPatch<{ ok: boolean }>(`/api/notifications/${encodeURIComponent(id)}/unread`);
+  return true;
+}
+
+export async function markAllNotificationsRead(): Promise<boolean> {
+  markAllLocalHelpRead();
+  await apiPost<{ ok: boolean }>('/api/notifications/mark-all-read', {});
+  return true;
+}
+
+function updateLocalHelpReadState(id: string, isRead: boolean): void {
+  try {
+    const raw = localStorage.getItem(LOCAL_HELP_KEY);
+    const list: HelpRequest[] = raw ? JSON.parse(raw) : [];
+    const next = list.map((r) =>
+      r.id === id ? { ...r, isRead, readAt: isRead ? new Date().toISOString() : null } : r
+    );
+    localStorage.setItem(LOCAL_HELP_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
+function markAllLocalHelpRead(): void {
+  try {
+    const raw = localStorage.getItem(LOCAL_HELP_KEY);
+    const list: HelpRequest[] = raw ? JSON.parse(raw) : [];
+    const now = new Date().toISOString();
+    const next = list.map((r) => ({ ...r, isRead: true, readAt: r.readAt || now }));
+    localStorage.setItem(LOCAL_HELP_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
 }
 
 export async function acknowledgeHelpRequest(id: string, acknowledgedBy: string): Promise<boolean> {
