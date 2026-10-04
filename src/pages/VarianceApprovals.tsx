@@ -8,9 +8,13 @@ export default function VarianceApprovals() {
   const { orders, approveVariance, rejectVariance } = usePurchaseOrders();
   const pending = orders.filter((o) => o.hasVariance && o.varianceApprovalStatus === 'pending');
 
-  const handleApprove = (poId: string) => {
-    approveVariance(poId);
-    toast.success('Variance approved. Stock posted to Warehouse.');
+  const handleApprove = async (poId: string) => {
+    try {
+      await approveVariance(poId);
+      toast.success('Variance approved. Stock posted to Warehouse.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Stock could not be saved.');
+    }
   };
 
   const handleReject = (poId: string) => {

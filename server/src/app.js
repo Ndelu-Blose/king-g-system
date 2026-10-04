@@ -409,6 +409,60 @@ export function createApp() {
     }
   });
 
+  app.post("/api/inventory/transfer", authMiddleware, requirePermission("inventory.transfer"), async (req, res) => {
+    const { productId, qty, from, to } = req.body || {};
+    if (!productId || qty == null) return res.status(400).json({ error: "productId and qty required" });
+    try {
+      const result = await pos.transferStock(productId, qty, from, to, {
+        actorId: req.user.id,
+        actorRole: req.user.role,
+      });
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      res.status(201).json(result);
+    } catch (e) {
+      return sendError(res, "POST /api/inventory/transfer", e, { fallback: "Failed to transfer stock" });
+    }
+  });
+
+  app.post("/api/inventory/count", authMiddleware, requirePermission("inventory.count"), async (req, res) => {
+    const { productId, totalQty } = req.body || {};
+    if (!productId || totalQty == null) return res.status(400).json({ error: "productId and totalQty required" });
+    try {
+      const result = await pos.applyStockCount(productId, totalQty, {
+        actorId: req.user.id,
+        actorRole: req.user.role,
+      });
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      res.status(201).json(result);
+    } catch (e) {
+      return sendError(res, "POST /api/inventory/count", e, { fallback: "Failed to save stock count" });
+    }
+  });
+
+  function canEditPricing(user) {
+    return user && ["owner", "senior_manager", "manager", "general_manager"].includes(user.role);
+  }
+
+  app.get("/api/pricing", authMiddleware, async (_req, res) => {
+    try {
+      res.json(await pos.getPricing());
+    } catch (e) {
+      return sendError(res, "GET /api/pricing", e, { fallback: "Failed to load prices" });
+    }
+  });
+
+  app.put("/api/pricing", authMiddleware, async (req, res) => {
+    if (!canEditPricing(req.user)) {
+      return res.status(403).json({ error: "You do not have permission to change prices" });
+    }
+    try {
+      const saved = await pos.savePricing(req.body || {});
+      res.json(saved);
+    } catch (e) {
+      return sendError(res, "PUT /api/pricing", e, { fallback: "Failed to save prices" });
+    }
+  });
+
   // --- Inventory: stock adjustment ---
   app.post("/api/inventory/adjustments", authMiddleware, requirePermission("inventory.adjust"), async (req, res) => {
     const { productId, delta, reasonCode } = req.body || {};

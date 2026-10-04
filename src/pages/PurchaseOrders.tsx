@@ -151,16 +151,20 @@ export default function PurchaseOrdersPage() {
     setDeliveredQtys(qtyMap);
   };
 
-  const handleReceiveSubmit = () => {
+  const handleReceiveSubmit = async () => {
     if (!receivePoId) return;
     const numeric: Record<string, number> = {};
     Object.entries(deliveredQtys).forEach(([id, v]) => (numeric[id] = parseInt(v, 10) || 0));
-    const { hasVariance } = receiveDelivery(receivePoId, deliveryInvoiceUrl || '—', numeric);
-    setReceivePoId(null);
-    if (hasVariance) {
-      toast.warning('Variance detected. Owner approval required before stock is posted.');
-    } else {
-      toast.success('Delivery received. Stock posted to Warehouse.');
+    try {
+      const { hasVariance } = await receiveDelivery(receivePoId, deliveryInvoiceUrl || '—', numeric);
+      setReceivePoId(null);
+      if (hasVariance) {
+        toast.warning('Variance detected. Owner approval required before stock is posted.');
+      } else {
+        toast.success('Delivery received. Stock posted to Warehouse.');
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Stock could not be saved.');
     }
   };
 

@@ -125,20 +125,22 @@ export default function ReceiveStockPage() {
     );
   };
 
-  const confirmIntake = () => {
+  const confirmIntake = async () => {
     if (!canProceedStep3 || !user || confirming) return;
     setConfirming(true);
     try {
       for (const line of verifiedLines) {
         const qtyToReceive = line.actualQuantity;
         if (qtyToReceive > 0) {
-          receiveStock(line.productId, qtyToReceive, location);
+          await receiveStock(line.productId, qtyToReceive, location, invoiceNumber);
         }
       }
       setConfirmed(true);
       toast.success(
-        `Stock intake confirmed. ${verifiedLines.filter((l) => l.actualQuantity > 0).length} line(s) updated. Audit trail: ${supplier}, ${invoiceNumber}, ${user.name}.`
+        `Stock intake saved. ${verifiedLines.filter((l) => l.actualQuantity > 0).length} line(s) updated. Audit trail: ${supplier}, ${invoiceNumber}, ${user.name}.`
       );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Stock could not be saved. Nothing new was kept.');
     } finally {
       setConfirming(false);
     }

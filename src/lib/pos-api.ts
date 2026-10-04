@@ -108,7 +108,7 @@ function authHeaders(): Record<string, string> {
 }
 
 async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
+  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders(), cache: 'no-store' });
   if (res.status === 404) throw new Error('NOT_FOUND');
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
@@ -527,6 +527,48 @@ export async function receiveStockApi(
       warehouse_qty: Number(body.after?.warehouse ?? 0),
     },
   };
+}
+
+export async function transferStockApi(payload: {
+  productId: string;
+  qty: number;
+  from: 'lounge' | 'warehouse';
+  to: 'lounge' | 'warehouse';
+}): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/inventory/transfer`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `Transfer failed (${res.status})`);
+  }
+}
+
+export async function applyStockCountApi(productId: string, totalQty: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/inventory/count`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ productId, totalQty }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `Stock count failed (${res.status})`);
+  }
+}
+
+export type PricingState = {
+  discountPercent: number;
+  productDiscounts: Record<string, number>;
+};
+
+export async function getPricing(): Promise<PricingState> {
+  return apiGet<PricingState>('/api/pricing');
+}
+
+export async function savePricing(state: PricingState): Promise<PricingState> {
+  return apiPut<PricingState>('/api/pricing', state);
 }
 
 export interface DeliveryIntakeApiPayload {

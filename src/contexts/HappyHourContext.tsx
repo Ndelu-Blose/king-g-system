@@ -5,10 +5,14 @@ import {
   useCallback,
   useMemo,
   useEffect,
+  useRef,
   type ReactNode,
 } from 'react';
+import { toast } from 'sonner';
 
+import { useAuth } from '@/lib/auth-context';
 import { loadDiscountRules } from '@/lib/discount-rules-storage';
+import { getPricing, savePricing } from '@/lib/pos-api';
 
 /** Returns true if current local time is within startTime–endTime (e.g. "17:00", "19:00"). Handles overnight (e.g. 22:00–02:00). */
 function isWithinTimeWindow(startTime: string, endTime: string): boolean {
@@ -54,13 +58,64 @@ interface HappyHourContextValue {
 const HappyHourContext = createContext<HappyHourContextValue | undefined>(undefined);
 
 export function HappyHourProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
   const [discountPercent, setDiscountPercentState] = useState(0);
   const [productDiscounts, setProductDiscountsState] = useState<ProductDiscounts>({});
   const [timeTick, setTimeTick] = useState(0);
+  const hydrated = useRef(false);
+  const loadedSnapshot = useRef<string | null>(null);
+
   useEffect(() => {
     const id = setInterval(() => setTimeTick((t) => t + 1), 60_000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      hydrated.current = false;
+      loadedSnapshot.current = null;
+      setDiscountPercentState(0);
+      setProductDiscountsState({});
+      return;
+    }
+
+    let cancelled = false;
+    getPricing()
+      .then((pricing) => {
+        if (cancelled) return;
+        const nextDiscounts = pricing.productDiscounts ?? {};
+        const nextPercent = Number(pricing.discountPercent) || 0;
+        loadedSnapshot.current = JSON.stringify({
+          discountPercent: nextPercent,
+          productDiscounts: nextDiscounts,
+        });
+        hydrated.current = true;
+        setDiscountPercentState(nextPercent);
+        setProductDiscountsState(nextDiscounts);
+      })
+      .catch(() => {
+        if (!cancelled) hydrated.current = true;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!hydrated.current || !isAuthenticated) return;
+    const snapshot = JSON.stringify({ discountPercent, productDiscounts });
+    if (loadedSnapshot.current === snapshot) {
+      loadedSnapshot.current = null;
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void savePricing({ discountPercent, productDiscounts }).catch((e) => {
+        toast.error(e instanceof Error ? e.message : 'Price change could not be saved.');
+      });
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [discountPercent, productDiscounts, isAuthenticated]);
 
   const setDiscountPercent = useCallback((percent: number) => {
     const value = Math.max(0, Math.min(100, Number(percent) || 0));

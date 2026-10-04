@@ -443,6 +443,136 @@ export async function receiveStock(productId, qty, location, { actorId, actorRol
   return result;
 }
 
+export async function transferStock(productId, qty, from, to, { actorId, actorRole }) {
+  const n = Math.floor(Number(qty) || 0);
+  const source = String(from || "").toLowerCase();
+  const dest = String(to || "").toLowerCase();
+  if (!productId || n <= 0) return { ok: false, error: "Invalid quantity" };
+  if (!["lounge", "warehouse"].includes(source) || !["lounge", "warehouse"].includes(dest)) {
+    return { ok: false, error: "Invalid location" };
+  }
+  if (source === dest) return { ok: false, error: "Choose two different locations" };
+
+  const client = await supabase();
+  const { data: inv, error } = await client
+    .from("inventory")
+    .select("total_qty,lounge_qty,warehouse_qty")
+    .eq("product_id", productId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!inv) return { ok: false, error: "Product not in inventory" };
+
+  const lounge = Number(inv.lounge_qty ?? 0);
+  const warehouse = Number(inv.warehouse_qty ?? 0);
+  const fromQty = source === "lounge" ? lounge : warehouse;
+  if (fromQty < n) return { ok: false, error: "Not enough stock in that location" };
+
+  const next = {
+    lounge_qty: source === "lounge" ? lounge - n : lounge + n,
+    warehouse_qty: source === "warehouse" ? warehouse - n : warehouse + n,
+    total_qty: lounge + warehouse,
+  };
+
+  const { error: updErr } = await client.from("inventory").update(next).eq("product_id", productId);
+  if (updErr) throw updErr;
+
+  await writeAudit({
+    action: "stock.transferred",
+    actorId,
+    actorRole,
+    entityType: "inventory",
+    entityId: productId,
+    before: { lounge, warehouse, total: lounge + warehouse },
+    after: { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty, qty: n, from: source, to: dest },
+    reasonCode: null,
+  });
+
+  return {
+    ok: true,
+    after: { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty },
+  };
+}
+
+export async function applyStockCount(productId, newTotalQty, { actorId, actorRole }) {
+  const target = Math.max(0, Math.floor(Number(newTotalQty)));
+  if (!productId || !Number.isFinite(target)) return { ok: false, error: "Invalid count" };
+
+  const client = await supabase();
+  const { data: inv, error } = await client
+    .from("inventory")
+    .select("total_qty,lounge_qty,warehouse_qty")
+    .eq("product_id", productId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!inv) return { ok: false, error: "Product not in inventory" };
+
+  const lounge = Number(inv.lounge_qty ?? 0);
+  const warehouse = Number(inv.warehouse_qty ?? 0);
+  const current = lounge + warehouse;
+  let nextWarehouse = warehouse + (target - current);
+  let nextLounge = lounge;
+  if (nextWarehouse < 0) {
+    nextLounge = Math.max(0, lounge + nextWarehouse);
+    nextWarehouse = 0;
+  }
+
+  const next = {
+    lounge_qty: nextLounge,
+    warehouse_qty: nextWarehouse,
+    total_qty: nextLounge + nextWarehouse,
+  };
+
+  const { error: updErr } = await client.from("inventory").update(next).eq("product_id", productId);
+  if (updErr) throw updErr;
+
+  await writeAudit({
+    action: "stock.count.applied",
+    actorId,
+    actorRole,
+    entityType: "inventory",
+    entityId: productId,
+    before: { lounge, warehouse, total: current },
+    after: { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty },
+    reasonCode: "stock_take",
+  });
+
+  return { ok: true, after: { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty } };
+}
+
+function parseProductDiscounts(raw) {
+  if (!raw) return {};
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      const n = Number(value);
+      if (!id || !Number.isFinite(n) || n <= 0) continue;
+      out[id] = Math.max(0, Math.min(100, n));
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export async function getPricing() {
+  const settings = await getSettings();
+  const discountPercent = Math.max(0, Math.min(100, Number(settings.happy_hour_discount_percent) || 0));
+  return {
+    discountPercent,
+    productDiscounts: parseProductDiscounts(settings.product_discounts_json),
+  };
+}
+
+export async function savePricing({ discountPercent, productDiscounts }) {
+  const percent = Math.max(0, Math.min(100, Number(discountPercent) || 0));
+  const discounts = parseProductDiscounts(productDiscounts);
+  await setSetting("happy_hour_discount_percent", String(percent));
+  await setSetting("product_discounts_json", JSON.stringify(discounts));
+  return { discountPercent: percent, productDiscounts: discounts };
+}
+
 export async function postStockAdjustment(productId, delta, reasonCode, { actorId, actorRole, approverId, approverRole }) {
   const client = await supabase();
   if (!productId) return { ok: false, error: "Product not in inventory" };

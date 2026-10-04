@@ -30,8 +30,8 @@ type PurchaseOrderContextValue = {
   addOrder: (supplierId: string, supplierName: string) => PurchaseOrder;
   updateOrderItems: (poId: string, items: POLineItem[]) => void;
   sendPO: (poId: string) => void;
-  receiveDelivery: (poId: string, deliveryInvoiceUrl: string, deliveredQtys: Record<string, number>) => { hasVariance: boolean };
-  approveVariance: (poId: string) => void;
+  receiveDelivery: (poId: string, deliveryInvoiceUrl: string, deliveredQtys: Record<string, number>) => Promise<{ hasVariance: boolean }>;
+  approveVariance: (poId: string) => Promise<void>;
   rejectVariance: (poId: string) => void;
   getOrder: (poId: string) => PurchaseOrder | undefined;
 };
@@ -75,7 +75,7 @@ export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const receiveDelivery = useCallback(
-    (poId: string, deliveryInvoiceUrl: string, deliveredQtys: Record<string, number>) => {
+    async (poId: string, deliveryInvoiceUrl: string, deliveredQtys: Record<string, number>) => {
       const po = orders.find((o) => o.id === poId);
       if (!po) return { hasVariance: false };
       let hasVariance = false;
@@ -84,6 +84,12 @@ export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
         if (delivered !== item.orderedQty) hasVariance = true;
         return { ...item, deliveredQty: delivered };
       });
+      if (!hasVariance) {
+        for (const item of itemsWithDelivered) {
+          const qty = item.deliveredQty ?? 0;
+          if (qty > 0) await addWarehouseStock(item.productId, qty);
+        }
+      }
       setOrders((prev) =>
         prev.map((o) =>
           o.id !== poId
@@ -99,32 +105,26 @@ export function PurchaseOrderProvider({ children }: { children: ReactNode }) {
               }
         )
       );
-      if (!hasVariance) {
-        itemsWithDelivered.forEach((item) => {
-          const qty = item.deliveredQty ?? 0;
-          if (qty > 0) addWarehouseStock(item.productId, qty);
-        });
-      }
       return { hasVariance };
     },
     [orders, addWarehouseStock]
   );
 
   const approveVariance = useCallback(
-    (poId: string) => {
-      setOrders((prev) => {
-        const po = prev.find((o) => o.id === poId);
-        if (!po || !po.hasVariance || po.varianceApprovalStatus !== 'pending') return prev;
-        po.items.forEach((item) => {
-          const qty = item.deliveredQty ?? 0;
-          if (qty > 0) addWarehouseStock(item.productId, qty);
-        });
-        return prev.map((o) =>
+    async (poId: string) => {
+      const po = orders.find((o) => o.id === poId);
+      if (!po || !po.hasVariance || po.varianceApprovalStatus !== 'pending') return;
+      for (const item of po.items) {
+        const qty = item.deliveredQty ?? 0;
+        if (qty > 0) await addWarehouseStock(item.productId, qty);
+      }
+      setOrders((prev) =>
+        prev.map((o) =>
           o.id === poId ? { ...o, varianceApprovalStatus: 'approved' as const } : o
-        );
-      });
+        )
+      );
     },
-    [addWarehouseStock]
+    [orders, addWarehouseStock]
   );
 
   const rejectVariance = useCallback((poId: string) => {

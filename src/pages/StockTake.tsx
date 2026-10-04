@@ -30,7 +30,7 @@ export default function StockTake() {
   const hasVariance = rows.some((r) => r.variance !== null && r.variance !== 0);
   const allCounted = rows.every((r) => getCount(r.productId) !== null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (saving) return;
     if (!allCounted) {
@@ -39,17 +39,19 @@ export default function StockTake() {
     }
     setSaving(true);
     try {
-      rows.forEach((r) => {
+      for (const r of rows) {
         const counted = getCount(r.productId);
-        if (counted !== null) applyStockTake(r.productId, counted);
-      });
+        if (counted !== null) await applyStockTake(r.productId, counted);
+      }
       setSubmitted(true);
       const variances = rows.filter((r) => r.variance !== null && r.variance !== 0);
       toast.success(
         variances.length > 0
-          ? `Stock take complete. ${variances.length} variance(s) applied to inventory.`
-          : 'Stock take complete. Counts applied.'
+          ? `Stock take saved. ${variances.length} variance(s) applied to inventory.`
+          : 'Stock take saved. Counts applied.'
       );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Stock take could not be saved.');
     } finally {
       setSaving(false);
     }

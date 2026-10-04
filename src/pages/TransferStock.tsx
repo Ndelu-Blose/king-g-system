@@ -37,7 +37,7 @@ export default function TransferStock() {
   const validQty = !Number.isNaN(qtyNum) && qtyNum > 0 && qtyNum <= maxQty;
   const validLocations = fromLocation !== toLocation;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (transferring) return;
     if (!productId || !validQty || !validLocations) {
@@ -46,12 +46,14 @@ export default function TransferStock() {
     }
     setTransferring(true);
     try {
-      transferStock(productId, qtyNum, fromLocation, toLocation);
+      await transferStock(productId, qtyNum, fromLocation, toLocation);
       setSubmitted(true);
       setProductId('');
       setQty('');
       setReason('');
       toast.success(`${qtyNum} unit(s) transferred from ${fromLocation} to ${toLocation}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Transfer could not be saved.');
     } finally {
       setTransferring(false);
     }
