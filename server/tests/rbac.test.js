@@ -99,7 +99,7 @@ describe("Auth middleware basics", () => {
       );
     await client
       .from("inventory")
-      .upsert([{ product_id: "1", total_qty: 20, lounge_qty: 0, warehouse_qty: 20 }], { onConflict: "product_id" });
+      .upsert([{ product_id: "1", total_qty: 20, lounge_qty: 20, warehouse_qty: 0 }], { onConflict: "product_id" });
   }
 
   async function login(email) {

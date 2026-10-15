@@ -171,7 +171,9 @@ async function countBlindCopiesForIntake(intakeId) {
     expect(blindCopiesAfter2).toBe(1);
 
     // Blind copy lines should match accepted qty.
-    const blindGet = await request(app).get(`/api/blind-copies/${encodeURIComponent(blindCopyId1)}`);
+    const blindGet = await request(app)
+      .get(`/api/blind-copies/${encodeURIComponent(blindCopyId1)}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
     expect(blindGet.statusCode).toBe(200);
     expect(Number(blindGet.body?.lines?.[0]?.qty)).toBe(expectedQty);
 

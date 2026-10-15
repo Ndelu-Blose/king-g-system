@@ -80,7 +80,7 @@ function buildSalePayload() {
       .from("inventory")
       .upsert(
         [
-          { product_id: "1", total_qty: 200, lounge_qty: 0, warehouse_qty: 200 },
+          { product_id: "1", total_qty: 200, lounge_qty: 100, warehouse_qty: 100 },
         ],
         { onConflict: "product_id" }
       );
@@ -90,7 +90,7 @@ function buildSalePayload() {
   });
 
   it("fetches transactions", async () => {
-    const res = await request(app).get("/api/transactions");
+    const res = await request(app).get("/api/transactions").set("Authorization", `Bearer ${ownerToken}`);
     expect(res.statusCode).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
   });
@@ -104,7 +104,7 @@ function buildSalePayload() {
     expect(createRes.statusCode).toBe(201);
     expect(createRes.body?.id).toBeTruthy();
 
-    const listRes = await request(app).get("/api/help-requests");
+    const listRes = await request(app).get("/api/help-requests").set("Authorization", `Bearer ${ownerToken}`);
     expect(listRes.statusCode).toBe(200);
     expect(Array.isArray(listRes.body)).toBe(true);
     expect(listRes.body.some((row) => row.id === createRes.body.id)).toBe(true);
@@ -283,11 +283,15 @@ function buildSalePayload() {
     expect(issueRes.statusCode).toBe(200);
     expect(issueRes.body?.header?.status).toBe("issued");
 
-    const getIntakeRes = await request(app).get(`/api/intakes/${encodeURIComponent(intakeId)}`);
+    const getIntakeRes = await request(app)
+      .get(`/api/intakes/${encodeURIComponent(intakeId)}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
     expect(getIntakeRes.statusCode).toBe(200);
     expect(getIntakeRes.body?.header?.status).toBe("confirmed");
 
-    const getBlindCopyRes = await request(app).get(`/api/blind-copies/${encodeURIComponent(blindCopyId)}`);
+    const getBlindCopyRes = await request(app)
+      .get(`/api/blind-copies/${encodeURIComponent(blindCopyId)}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
     expect(getBlindCopyRes.statusCode).toBe(200);
     expect(Number(getBlindCopyRes.body?.lines?.[0]?.qty)).toBe(5);
   }, 30000);
