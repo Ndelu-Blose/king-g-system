@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeftRight } from 'lucide-react';
 import {
   Select,
@@ -8,26 +9,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { BackButton } from '@/components/BackButton';
+import { StockMovementsTable } from '@/components/StockMovementsTable';
+import { getStockMovements, type StockMovementType } from '@/lib/pos-api';
 
-type MovementType = 'SALE' | 'TRANSFER' | 'ADJUSTMENT' | 'DAMAGE' | 'RECEIPT';
-
-interface Movement {
-  id: string;
-  date: string;
-  type: MovementType;
-  product: string;
-  qty: number;
-  reference?: string;
-}
+const TYPE_OPTIONS: StockMovementType[] = ['RECEIPT', 'TRANSFER', 'ADJUSTMENT', 'COUNT'];
 
 export default function InventoryMovementsPage() {
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const movements: Movement[] = [];
+  const [typeFilter, setTypeFilter] = useState<StockMovementType | 'all'>('all');
 
-  const filtered =
-    typeFilter === 'all'
-      ? movements
-      : movements.filter((m) => m.type === typeFilter);
+  const { data: movements = [], isLoading, isError } = useQuery({
+    queryKey: ['stock-movements', 'page', typeFilter],
+    queryFn: () => getStockMovements({ type: typeFilter }),
+  });
 
   return (
     <div className="space-y-6">
@@ -40,54 +33,25 @@ export default function InventoryMovementsPage() {
             <ArrowLeftRight className="h-6 w-6 text-primary" />
             Inventory Movements
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Stock movements by type.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Stock received, transferred, adjusted and counted, newest first.
+          </p>
         </div>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
+        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as StockMovementType | 'all')}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by type" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="SALE">SALE</SelectItem>
-            <SelectItem value="TRANSFER">TRANSFER</SelectItem>
-            <SelectItem value="ADJUSTMENT">ADJUSTMENT</SelectItem>
-            <SelectItem value="DAMAGE">DAMAGE</SelectItem>
-            <SelectItem value="RECEIPT">RECEIPT</SelectItem>
+            {TYPE_OPTIONS.map((t) => (
+              <SelectItem key={t} value={t}>{t}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
       <div className="glass-card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Date</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Type</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Product</th>
-              <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Qty</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Reference</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((m) => (
-              <tr key={m.id} className="border-b border-border/50 hover:bg-muted/20">
-                <td className="px-5 py-3 text-muted-foreground">{m.date}</td>
-                <td className="px-5 py-3">
-                  <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                    {m.type}
-                  </span>
-                </td>
-                <td className="px-5 py-3 font-medium text-foreground">{m.product}</td>
-                <td className="px-5 py-3 text-right">
-                  <span className={m.qty >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
-                    {m.qty >= 0 ? '+' : ''}{m.qty}
-                  </span>
-                </td>
-                <td className="px-5 py-3 text-sm text-muted-foreground">{m.reference || '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <StockMovementsTable movements={movements} isLoading={isLoading} isError={isError} />
       </div>
     </div>
   );

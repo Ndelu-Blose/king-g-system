@@ -4,7 +4,7 @@
 import { getUserByEmail, resolvePasswordResetRecipient, updateOwnProfile, changeOwnPassword, getUserById } from "./src/services/users.service.js";
 import { credentialsValid } from "./src/lib/auth-credentials.js";
 import { resolveBearerUser } from "./src/lib/auth-resolve.js";
-import { legacyTokenTtlSec, signLegacyToken } from "./src/lib/auth-legacy.js";
+import { isLegacyAuthAvailable, legacyTokenTtlSec, signLegacyToken } from "./src/lib/auth-legacy.js";
 import { isSupabaseAuthEnabled, signInWithSupabaseAuth } from "./src/lib/auth-supabase.js";
 import { isResendConfigured, sendPasswordResetEmail } from "./src/services/email.service.js";
 import { logRouteError, sendError } from "./src/lib/api-error.js";
@@ -112,6 +112,11 @@ export async function loginHandler(req, res) {
     const user = await getUserByEmail(String(email).trim());
     if (!user || user.active === false || !credentialsValid(user, password)) {
       return res.status(401).json({ error: "Invalid credentials" });
+    }
+    if (!isLegacyAuthAvailable()) {
+      return res.status(503).json({
+        error: "Sign-in for this account is not available right now. Contact an owner.",
+      });
     }
 
     const payload = {

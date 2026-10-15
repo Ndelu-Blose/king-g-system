@@ -7,6 +7,7 @@ import ReportDetail from "./ReportDetail";
 vi.mock("@/lib/pos-api", () => ({
   getAllProducts: vi.fn(async () => []),
   getTransactionsFromApi: vi.fn(async () => []),
+  getStockMovements: vi.fn(async () => []),
 }));
 
 vi.mock("@/contexts/InventoryContext", () => ({

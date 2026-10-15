@@ -7,6 +7,7 @@ import {
   subscribeToProductCatalog,
   transferStockApi,
 } from '@/lib/pos-api';
+import { useAuth } from '@/lib/auth-context';
 
 export type StockLocation = 'lounge' | 'warehouse';
 
@@ -23,6 +24,8 @@ type InventoryContextValue = {
 const InventoryContext = createContext<InventoryContextValue | null>(null);
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [inventory, setInventory] = useState<InventoryBalance[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,9 +41,10 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Balances need a signed-in user, so reload whenever the user changes.
   useEffect(() => {
     void refreshInventory();
-  }, [refreshInventory]);
+  }, [refreshInventory, userId]);
 
   useEffect(() => {
     return subscribeToProductCatalog(() => {

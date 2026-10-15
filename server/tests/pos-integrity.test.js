@@ -36,7 +36,7 @@ async function seedSupabaseBase() {
     );
 
   // Reset inventory to a known value for deterministic deltas.
-  await client.from("inventory").upsert([{ product_id: "1", total_qty: 50, lounge_qty: 0, warehouse_qty: 50 }], { onConflict: "product_id" });
+  await client.from("inventory").upsert([{ product_id: "1", total_qty: 50, lounge_qty: 50, warehouse_qty: 0 }], { onConflict: "product_id" });
 }
 
 async function login(email) {

@@ -66,7 +66,8 @@ export async function getUserByAuthId(authUserId) {
 
 export async function getUserByEmail(email) {
   const needle = String(email || "").trim().toLowerCase();
-  if (!needle || !needle.includes("@") || /[%_]/.test(needle)) return null;
+  // Exact .eq() match below, so "_" and "%" are ordinary characters (sr_manager@…).
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(needle)) return null;
 
   const client = await supabase();
 

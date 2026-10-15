@@ -5,7 +5,8 @@ import { Download, Filter } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
 import { getReportBySlug } from '@/lib/report-config';
 import { exportReportAsCSV } from '@/lib/export-report';
-import { getAllProducts, getTransactionsFromApi } from '@/lib/pos-api';
+import { getAllProducts, getStockMovements, getTransactionsFromApi } from '@/lib/pos-api';
+import { StockMovementsTable } from '@/components/StockMovementsTable';
 import { summarizeTransactions, transactionsInDateRange } from '@/lib/sales-stats';
 import { useInventory } from '@/contexts/InventoryContext';
 import {
@@ -88,6 +89,19 @@ export default function ReportDetail() {
   const { data: products = [] } = useQuery({
     queryKey: ['products', 'reports'],
     queryFn: getAllProducts,
+  });
+
+  const isStockMovementReport = report?.slug === 'stock-movement';
+  const { data: stockMovements = [], isLoading: stockMovementsLoading, isError: stockMovementsError } = useQuery({
+    queryKey: ['stock-movements', 'report', dateFrom, dateTo, location],
+    queryFn: () => {
+      const [start, end] = dateFrom && dateTo && dateFrom > dateTo ? [dateTo, dateFrom] : [dateFrom, dateTo];
+      const from = new Date(`${start}T00:00:00`);
+      const to = new Date(`${end}T00:00:00`);
+      to.setDate(to.getDate() + 1);
+      return getStockMovements({ from: from.toISOString(), to: to.toISOString(), location });
+    },
+    enabled: isStockMovementReport,
   });
 
   const categories = useMemo(() => ['all', ...new Set(products.map((p) => p.category))], [products]);
@@ -459,9 +473,14 @@ export default function ReportDetail() {
         )}
 
         {report.slug === 'stock-movement' && (
-          <div className="glass-card p-5">
-            <h3 className="font-display text-lg font-semibold text-foreground mb-4">Stock movements</h3>
-            <p className="text-sm text-muted-foreground">No movement history recorded for the selected period.</p>
+          <div className="glass-card overflow-hidden">
+            <h3 className="font-display text-lg font-semibold text-foreground px-5 pt-5 pb-2">Stock movements</h3>
+            <StockMovementsTable
+              movements={stockMovements}
+              isLoading={stockMovementsLoading}
+              isError={stockMovementsError}
+              emptyText="No movement history recorded for the selected period."
+            />
           </div>
         )}
 

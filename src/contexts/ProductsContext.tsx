@@ -15,6 +15,7 @@ import {
   updateProduct as apiUpdateProduct,
   type ProductInput,
 } from '@/lib/pos-api';
+import { useAuth } from '@/lib/auth-context';
 
 type ProductsContextValue = {
   products: ProductWithStock[];
@@ -28,6 +29,8 @@ type ProductsContextValue = {
 const ProductsContext = createContext<ProductsContextValue | null>(null);
 
 export function ProductsProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [products, setProducts] = useState<ProductWithStock[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,9 +45,10 @@ export function ProductsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // The catalog needs a signed-in user, so reload whenever the user changes.
   useEffect(() => {
     void refreshProducts();
-  }, [refreshProducts]);
+  }, [refreshProducts, userId]);
 
   useEffect(() => {
     return subscribeToProductCatalog(() => {

@@ -5,7 +5,7 @@ import "./instrument.js";
 import * as Sentry from "@sentry/node";
 
 import { loginHandler, meHandler, requestPasswordResetHandler, updateProfileHandler, changePasswordHandler, authMiddleware } from "../auth.js";
-import { requirePermission, requireAuth } from "../permissions.js";
+import { requirePermission, requireAuth, hasPermission } from "../permissions.js";
 import { listReports } from "./services/reports.service.js";
 import { getServerCapabilities } from "./lib/server-capabilities.js";
 import * as pos from "./services/pos.service.js";
@@ -14,6 +14,7 @@ import * as receiving from "./services/receiving.service.js";
 import * as deliveries from "./services/deliveries.service.js";
 import * as notifications from "./services/notifications.service.js";
 import { sendError } from "./lib/api-error.js";
+import { sanitizeClientAuditEntry, validateSettingsUpdate, corsOriginsFromEnv } from "./lib/request-policy.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -22,7 +23,10 @@ const upload = multer({
 
 export function createApp() {
   const app = express();
-  app.use(cors());
+  // Restrict browser origins when CORS_ORIGINS is set; otherwise keep the
+  // previous open behaviour (auth is by Bearer token, not cookies).
+  const corsOrigins = corsOriginsFromEnv();
+  app.use(corsOrigins.length ? cors({ origin: corsOrigins }) : cors());
   app.use(express.json());
 
   // --- Auth (no auth middleware) ---
@@ -33,7 +37,7 @@ export function createApp() {
   app.patch("/api/auth/password", authMiddleware, changePasswordHandler);
 
   // --- Products (Supabase) ---
-  app.get("/api/products", async (_req, res) => {
+  app.get("/api/products", authMiddleware, requireAuth, async (_req, res) => {
     try {
       const products = await pos.getAllProducts();
       res.json(products);
@@ -42,7 +46,7 @@ export function createApp() {
     }
   });
 
-  app.get("/api/products/barcode/:barcode", async (req, res) => {
+  app.get("/api/products/barcode/:barcode", authMiddleware, requireAuth, async (req, res) => {
     const barcode = (req.params.barcode || "").trim();
     if (!barcode) return res.status(400).json({ error: "Barcode required" });
     try {
@@ -54,7 +58,7 @@ export function createApp() {
     }
   });
 
-  app.get("/api/products/search", async (req, res) => {
+  app.get("/api/products/search", authMiddleware, requireAuth, async (req, res) => {
     const q = (req.query.q || "").trim();
     const limit = Math.min(Number(req.query.limit) || 20, 50);
     try {
@@ -117,7 +121,7 @@ export function createApp() {
     }
   });
 
-  app.get("/api/inventory/balances", async (_req, res) => {
+  app.get("/api/inventory/balances", authMiddleware, requireAuth, async (_req, res) => {
     try {
       const balances = await pos.getInventoryBalances();
       res.json(balances);
@@ -126,7 +130,16 @@ export function createApp() {
     }
   });
 
-  app.get("/api/categories", async (_req, res) => {
+  app.get("/api/inventory/movements", authMiddleware, requirePermission("inventory.view"), async (req, res) => {
+    const { from, to, type, location, productId, limit } = req.query;
+    try {
+      res.json(await pos.listStockMovements({ from, to, type, location, productId, limit }));
+    } catch (e) {
+      return sendError(res, "GET /api/inventory/movements", e, { fallback: "Failed to load stock movements" });
+    }
+  });
+
+  app.get("/api/categories", authMiddleware, requireAuth, async (_req, res) => {
     try {
       const categories = await pos.getCategories();
       res.json(categories);
@@ -136,8 +149,11 @@ export function createApp() {
   });
 
   // --- Transactions (real-time from database) ---
-  app.get("/api/transactions", async (req, res) => {
-    const cashierId = req.query.cashierId || null;
+  // Without report.view (e.g. cashiers) a user only ever sees their own sales.
+  app.get("/api/transactions", authMiddleware, requireAuth, async (req, res) => {
+    const cashierId = hasPermission(req.user.role, "report.view")
+      ? req.query.cashierId || null
+      : req.user.id;
     try {
       const transactions = await pos.getAllTransactions(cashierId);
       res.json(transactions);
@@ -278,7 +294,7 @@ export function createApp() {
     }
   });
 
-  app.get("/api/help-requests", async (req, res) => {
+  app.get("/api/help-requests", authMiddleware, requireAuth, async (req, res) => {
     const status = req.query.status || null;
     try {
       const list = await pos.getHelpRequests(status);
@@ -465,33 +481,43 @@ export function createApp() {
 
   // --- Inventory: stock adjustment ---
   app.post("/api/inventory/adjustments", authMiddleware, requirePermission("inventory.adjust"), async (req, res) => {
-    const { productId, delta, reasonCode } = req.body || {};
-    if (!productId || delta == null) return res.status(400).json({ error: "productId and delta required" });
+    const { productId, qty, location, reasonCode } = req.body || {};
+    if (!productId || qty == null) return res.status(400).json({ error: "productId and qty required" });
     try {
-      const result = await pos.postStockAdjustment(productId, delta, reasonCode || "adjustment", {
+      const result = await pos.writeOffStock(productId, qty, location, reasonCode, {
         actorId: req.user.id,
         actorRole: req.user.role,
-        approverId: req.user.id,
-        approverRole: req.user.role,
       });
       if (!result.ok) return res.status(400).json({ error: result.error });
       res.status(201).json(result);
     } catch (e) {
-      return sendError(res, "POST /api/inventory/adjustments", e, { fallback: "Failed to post adjustment" });
+      return sendError(res, "POST /api/inventory/adjustments", e, { fallback: "Failed to write off stock" });
     }
   });
 
   // --- Audit — require auth; use identity from token ---
-  app.post("/api/audit", authMiddleware, requireAuth, async (req, res) => {
-    const entry = req.body;
-    if (!entry || !entry.action) {
-      return res.status(400).json({ error: "Invalid audit entry: need action" });
+  app.get("/api/audit", authMiddleware, requirePermission("audit.view"), async (req, res) => {
+    const { from, to, action, limit } = req.query;
+    try {
+      res.json(await pos.listAuditLog({ from, to, action, limit }));
+    } catch (e) {
+      return sendError(res, "GET /api/audit", e, { fallback: "Failed to load audit log" });
     }
+  });
+
+  // Informational client events only; actor, time and every other field are
+  // set here so a caller cannot forge approvals or entity changes.
+  app.post("/api/audit", authMiddleware, requireAuth, async (req, res) => {
+    const entry = sanitizeClientAuditEntry(req.body);
+    if (entry.error) return res.status(400).json({ error: entry.error });
     try {
       await pos.writeAudit({
-        ...entry,
+        action: entry.action,
         actorId: req.user.id,
         actorRole: req.user.role,
+        entityType: "client",
+        after: entry.after,
+        reasonCode: entry.reasonCode,
       });
       res.status(201).json({ ok: true });
     } catch (e) {
@@ -576,12 +602,19 @@ export function createApp() {
   });
 
   app.put("/api/settings", authMiddleware, requirePermission("admin.settings"), async (req, res) => {
-    const body = req.body || {};
-    if (typeof body !== "object") return res.status(400).json({ error: "Settings must be an object" });
+    const check = validateSettingsUpdate(req.body, req.user.role);
+    if (check.error) return res.status(check.status).json({ error: check.error });
     try {
-      for (const [key, value] of Object.entries(body)) {
-        if (key && value !== undefined) await pos.setSetting(key, String(value));
-      }
+      const before = await pos.getSettings();
+      for (const [key, value] of check.updates) await pos.setSetting(key, value);
+      await pos.writeAudit({
+        action: "settings.updated",
+        actorId: req.user.id,
+        actorRole: req.user.role,
+        entityType: "venue_settings",
+        before: Object.fromEntries(check.updates.map(([key]) => [key, before[key] ?? null])),
+        after: Object.fromEntries(check.updates),
+      });
       res.json(await pos.getSettings());
     } catch (e) {
       return sendError(res, "PUT /api/settings", e, { fallback: "Failed to save settings" });
@@ -627,7 +660,7 @@ export function createApp() {
   });
 
   // --- Inventory receiving (delivery intakes + blind transfer copies) ---
-  app.get("/api/intakes/:id", async (req, res) => {
+  app.get("/api/intakes/:id", authMiddleware, requirePermission("inventory.view"), async (req, res) => {
     const { id } = req.params;
     try {
       const intake = await receiving.getIntakeById(id);
@@ -638,7 +671,7 @@ export function createApp() {
     }
   });
 
-  app.get("/api/blind-copies/:id", async (req, res) => {
+  app.get("/api/blind-copies/:id", authMiddleware, requirePermission("inventory.view"), async (req, res) => {
     const { id } = req.params;
     try {
       const copy = await receiving.getBlindCopyById(id);
@@ -785,13 +818,8 @@ export function createApp() {
   app.get("/health", (_req, res) => res.json({ ok: true, ...getServerCapabilities() }));
   app.get("/api/health", (_req, res) => res.json({ ok: true, ...getServerCapabilities() }));
 
-  // Temporary: verify Sentry API capture (remove after confirming Issues)
-  app.get("/api/debug-sentry", (_req, _res) => {
-    throw new Error("King G API Sentry example error");
-  });
-
   // --- Reports (Supabase-backed; optional during migration) ---
-  app.get("/api/reports", async (req, res) => {
+  app.get("/api/reports", authMiddleware, requirePermission("report.view"), async (req, res) => {
     try {
       const limit = req.query.limit;
       const reports = await listReports({ limit });

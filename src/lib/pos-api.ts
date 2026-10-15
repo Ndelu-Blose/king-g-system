@@ -440,27 +440,8 @@ export async function refundSaleApi(
   saleId: string,
   opts?: { amount?: number; reasonCode?: string }
 ): Promise<{ ok: boolean; error?: string }> {
-  if (USE_DIRECT_SUPABASE) {
-    try {
-      const { data: sale, error } = await supabase.from('sales').select('*').eq('id', saleId).single();
-      if (error || !sale) return { ok: false, error: error?.message || 'Sale not found' };
-      const { error: updErr } = await supabase.from('sales').update({ status: 'refunded' }).eq('id', saleId);
-      if (updErr) return { ok: false, error: updErr.message };
-      await writeAuditLog({
-        action: 'refund.completed',
-        actorId: String(sale.cashier_id),
-        actorRole: null,
-        entityType: 'sale',
-        entityId: saleId,
-        before: { status: 'completed', total: sale.total },
-        after: { status: 'refunded', refundAmount: opts?.amount ?? sale.total },
-        reasonCode: opts?.reasonCode || 'refund_approved',
-      });
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: (e as Error).message };
-    }
-  }
+  // Refunds always go through the API so the server records the approver
+  // and audit entry; the client cannot write those itself.
   try {
     const res = await fetch(`${API_BASE}/api/sales/${encodeURIComponent(saleId)}/refund`, {
       method: 'POST',
@@ -527,6 +508,59 @@ export async function receiveStockApi(
       warehouse_qty: Number(body.after?.warehouse ?? 0),
     },
   };
+}
+
+export type StockMovementType = 'RECEIPT' | 'TRANSFER' | 'ADJUSTMENT' | 'COUNT' | 'SALE' | 'VOID';
+
+export interface StockMovement {
+  id: string;
+  createdAt: string;
+  type: StockMovementType;
+  productId: string;
+  productName: string;
+  qty: number;
+  fromLocation: string | null;
+  toLocation: string | null;
+  reference: string | null;
+  supplier: string | null;
+  reason: string | null;
+  actorId: string | null;
+  actorName: string | null;
+  deliveryRecordId: string | null;
+}
+
+export async function getStockMovements(query: {
+  from?: string;
+  to?: string;
+  type?: string;
+  location?: string;
+  productId?: string;
+  limit?: number;
+} = {}): Promise<StockMovement[]> {
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === '' || value === 'all') continue;
+    qs.set(key, String(value));
+  }
+  const search = qs.toString();
+  return apiGet<StockMovement[]>(`/api/inventory/movements${search ? `?${search}` : ''}`);
+}
+
+export async function writeOffStockApi(payload: {
+  productId: string;
+  qty: number;
+  location: 'lounge' | 'warehouse';
+  reasonCode: 'expired' | 'broken';
+}): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/inventory/adjustments`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `Write-off failed (${res.status})`);
+  }
 }
 
 export async function transferStockApi(payload: {

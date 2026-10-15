@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getSupabaseAdmin } from "../lib/supabase.js";
+import { WRITE_OFF_REASONS, restoreToLounge, saleFromLounge, writeOffNext } from "../lib/stock-movement-view.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCT_SELECT = "id,name,barcode,category,base_price,cost_price,size_ml,image";
@@ -473,24 +474,43 @@ export async function transferStock(productId, qty, from, to, { actorId, actorRo
     total_qty: lounge + warehouse,
   };
 
+  const before = { lounge, warehouse, total: lounge + warehouse };
+  const after = { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty };
   const { error: updErr } = await client.from("inventory").update(next).eq("product_id", productId);
   if (updErr) throw updErr;
 
-  await writeAudit({
-    action: "stock.transferred",
-    actorId,
-    actorRole,
-    entityType: "inventory",
-    entityId: productId,
-    before: { lounge, warehouse, total: lounge + warehouse },
-    after: { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty, qty: n, from: source, to: dest },
-    reasonCode: null,
-  });
+  try {
+    await recordStockMovement(client, {
+      type: "TRANSFER",
+      productId,
+      qty: n,
+      fromLocation: source,
+      toLocation: dest,
+      actorId,
+      actorRole,
+      balanceBefore: before,
+      balanceAfter: after,
+    });
+    await writeAudit({
+      action: "stock.transferred",
+      actorId,
+      actorRole,
+      entityType: "inventory",
+      entityId: productId,
+      before,
+      after: { ...after, qty: n, from: source, to: dest },
+      reasonCode: null,
+    });
+  } catch (e) {
+    await client.from("inventory").update({
+      lounge_qty: lounge,
+      warehouse_qty: warehouse,
+      total_qty: before.total,
+    }).eq("product_id", productId);
+    throw e;
+  }
 
-  return {
-    ok: true,
-    after: { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty },
-  };
+  return { ok: true, after };
 }
 
 export async function applyStockCount(productId, newTotalQty, { actorId, actorRole }) {
@@ -573,43 +593,66 @@ export async function savePricing({ discountPercent, productDiscounts }) {
   return { discountPercent: percent, productDiscounts: discounts };
 }
 
-export async function postStockAdjustment(productId, delta, reasonCode, { actorId, actorRole, approverId, approverRole }) {
-  const client = await supabase();
+export async function writeOffStock(productId, qty, location, reasonCode, { actorId, actorRole }) {
+  const reason = WRITE_OFF_REASONS[reasonCode];
   if (!productId) return { ok: false, error: "Product not in inventory" };
+  if (!reason) return { ok: false, error: "Choose expired or broken" };
 
-  const current = await client
+  const client = await supabase();
+  const { data: inv, error } = await client
     .from("inventory")
-    .select("total_qty")
+    .select("total_qty,lounge_qty,warehouse_qty")
     .eq("product_id", productId)
     .maybeSingle();
+  if (error) throw error;
+  if (!inv) return { ok: false, error: "Product not in inventory" };
 
-  if (current.error) throw current.error;
-  if (!current.data) return { ok: false, error: "Product not in inventory" };
+  const lounge = Number(inv.lounge_qty ?? 0);
+  const warehouse = Number(inv.warehouse_qty ?? 0);
+  const total = Number(inv.total_qty ?? lounge + warehouse);
+  const next = writeOffNext({ lounge, warehouse, total, location, qty });
+  if (next.error) return { ok: false, error: next.error };
 
-  const d = Number(delta) || 0;
-  const before = { total: current.data.total_qty ?? 0 };
-  const newTotal = Math.max(0, before.total + d);
-
-  const { error: updErr } = await client
-    .from("inventory")
-    .update({ total_qty: newTotal })
-    .eq("product_id", productId);
+  const row = {
+    lounge_qty: next.lounge,
+    warehouse_qty: next.warehouse,
+    total_qty: next.total,
+  };
+  const { error: updErr } = await client.from("inventory").update(row).eq("product_id", productId);
   if (updErr) throw updErr;
 
-  const after = { total: newTotal, delta: d };
-
-  await writeAudit({
-    action: "stock.adjustment.posted",
-    actorId,
-    actorRole,
-    approverId: approverId || actorId,
-    approverRole: approverRole || actorRole,
-    entityType: "inventory",
-    entityId: productId,
-    before,
-    after,
-    reasonCode: reasonCode || "adjustment",
-  });
+  const before = { lounge, warehouse, total };
+  const after = { lounge: next.lounge, warehouse: next.warehouse, total: next.total, qty: next.qty, location: next.location };
+  try {
+    await recordStockMovement(client, {
+      type: "ADJUSTMENT",
+      productId,
+      qty: -next.qty,
+      fromLocation: next.location,
+      reason,
+      actorId,
+      actorRole,
+      balanceBefore: before,
+      balanceAfter: { lounge: next.lounge, warehouse: next.warehouse, total: next.total },
+    });
+    await writeAudit({
+      action: "stock.written_off",
+      actorId,
+      actorRole,
+      entityType: "inventory",
+      entityId: productId,
+      before,
+      after,
+      reasonCode,
+    });
+  } catch (e) {
+    await client.from("inventory").update({
+      lounge_qty: lounge,
+      warehouse_qty: warehouse,
+      total_qty: total,
+    }).eq("product_id", productId);
+    throw e;
+  }
 
   return { ok: true, before, after };
 }
@@ -665,15 +708,18 @@ export async function createSale(payload, cashierName = "") {
     for (const [productId, requestedQty] of qtyByProduct.entries()) {
       const { data: inv, error: invErr } = await client
         .from("inventory")
-        .select("total_qty")
+        .select("total_qty,lounge_qty,warehouse_qty")
         .eq("product_id", productId)
         .maybeSingle();
       if (invErr) throw invErr;
       if (!inv) throw new Error(`Inventory row not found for product ${productId}`);
-      const currentTotal = Number(inv.total_qty ?? 0);
-      if (currentTotal < requestedQty) {
-        throw new Error(`Insufficient stock for product ${productId}`);
-      }
+      const check = saleFromLounge({
+        lounge: inv.lounge_qty,
+        warehouse: inv.warehouse_qty,
+        total: inv.total_qty,
+        qty: requestedQty,
+      });
+      if (check.error) throw new Error(`${check.error} for product ${productId}`);
     }
 
     const saleRow = {
@@ -718,20 +764,37 @@ export async function createSale(payload, cashierName = "") {
       if (itemsErr) throw itemsErr;
     }
 
-    // Decrement total stock (matches legacy behavior; location-level stock is not modeled here).
-    for (const item of items) {
-      const pid = String(item.productId ?? "");
-      const dec = Number(item.qty) || 0;
+    // Sales leave the lounge. Warehouse stock stays until it is moved, expired, or broken.
+    for (const [productId, requestedQty] of qtyByProduct.entries()) {
       const { data: inv, error: invErr } = await client
         .from("inventory")
-        .select("total_qty")
-        .eq("product_id", pid)
+        .select("total_qty,lounge_qty,warehouse_qty")
+        .eq("product_id", productId)
         .maybeSingle();
       if (invErr) throw invErr;
-      if (!inv) throw new Error(`Inventory row not found for product ${pid}`);
-      const currentTotal = Number(inv.total_qty ?? 0);
-      const nextTotal = currentTotal - dec;
-      await client.from("inventory").update({ total_qty: nextTotal }).eq("product_id", pid);
+      if (!inv) throw new Error(`Inventory row not found for product ${productId}`);
+      const before = {
+        lounge: Number(inv.lounge_qty ?? 0),
+        warehouse: Number(inv.warehouse_qty ?? 0),
+        total: Number(inv.total_qty ?? 0),
+      };
+      const next = saleFromLounge({ ...before, qty: requestedQty });
+      if (next.error) throw new Error(`${next.error} for product ${productId}`);
+      const { error: updErr } = await client
+        .from("inventory")
+        .update({ lounge_qty: next.lounge, warehouse_qty: next.warehouse, total_qty: next.total })
+        .eq("product_id", productId);
+      if (updErr) throw updErr;
+      await rememberStockMovement(client, {
+        type: "SALE",
+        productId,
+        qty: -next.qty,
+        fromLocation: "lounge",
+        reference: id,
+        actorId: payload.cashierId,
+        balanceBefore: before,
+        balanceAfter: { lounge: next.lounge, warehouse: next.warehouse, total: next.total },
+      });
     }
 
     return { id, createdAt, created: true };
@@ -815,16 +878,34 @@ export async function voidSale(saleId, { approverId, approverRole, reasonCode })
     if (restoreQty === 0) continue;
     const { data: inv, error: invErr } = await client
       .from("inventory")
-      .select("total_qty")
+      .select("total_qty,lounge_qty,warehouse_qty")
       .eq("product_id", item.product_id)
       .maybeSingle();
     if (invErr) throw invErr;
     if (!inv) throw new Error(`Inventory row not found for product ${item.product_id}`);
-    const currentTotal = Number(inv.total_qty ?? 0);
-    await client
+    const before = {
+      lounge: Number(inv.lounge_qty ?? 0),
+      warehouse: Number(inv.warehouse_qty ?? 0),
+      total: Number(inv.total_qty ?? 0),
+    };
+    const next = restoreToLounge({ ...before, qty: restoreQty });
+    const { error: updErr } = await client
       .from("inventory")
-      .update({ total_qty: currentTotal + restoreQty })
+      .update({ lounge_qty: next.lounge, warehouse_qty: next.warehouse, total_qty: next.total })
       .eq("product_id", item.product_id);
+    if (updErr) throw updErr;
+    await rememberStockMovement(client, {
+      type: "VOID",
+      productId: item.product_id,
+      qty: next.qty,
+      toLocation: "lounge",
+      reference: saleId,
+      reason: reasonCode || null,
+      actorId: approverId,
+      actorRole: approverRole,
+      balanceBefore: before,
+      balanceAfter: { lounge: next.lounge, warehouse: next.warehouse, total: next.total },
+    });
   }
 
   const { error: updErr } = await client.from("sales").update({ status: "void" }).eq("id", saleId);
@@ -871,6 +952,159 @@ export async function refundSale(saleId, { approverId, approverRole, reasonCode,
   });
 
   return { ok: true };
+}
+
+async function getUserNames(ids) {
+  const unique = Array.from(new Set(ids.filter(Boolean).map(String)));
+  if (!unique.length) return new Map();
+  const client = await supabase();
+  const { data, error } = await client.from("users").select("id,name").in("id", unique);
+  if (error) return new Map();
+  return new Map((data ?? []).map((u) => [String(u.id), u.name]));
+}
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:?\d{2})$/;
+
+function parseInstant(value) {
+  const t = Date.parse(value);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+function dayStartIso(value) {
+  const v = String(value ?? "");
+  if (DATE_ONLY.test(v)) return `${v}T00:00:00.000Z`;
+  return DATE_TIME.test(v) ? parseInstant(v) : null;
+}
+
+function nextDayStartIso(value) {
+  const v = String(value ?? "");
+  if (DATE_ONLY.test(v)) return new Date(Date.parse(`${v}T00:00:00.000Z`) + 24 * 60 * 60 * 1000).toISOString();
+  return DATE_TIME.test(v) ? parseInstant(v) : null;
+}
+
+function movementRow(row) {
+  return {
+    id: String(row.id),
+    createdAt: row.created_at,
+    type: row.type,
+    productId: row.product_id,
+    productName: row.product_name ?? row.product_id,
+    qty: Number(row.qty ?? 0),
+    fromLocation: row.from_location ?? null,
+    toLocation: row.to_location ?? null,
+    reference: row.reference ?? null,
+    supplier: row.supplier ?? null,
+    reason: row.reason ?? null,
+    actorId: row.actor_id ?? null,
+    actorName: null,
+    deliveryRecordId: row.delivery_record_id ?? null,
+  };
+}
+
+/** Ledger row. The audit log is written separately and is not this list. */
+async function recordStockMovement(client, row) {
+  let productName = row.productName;
+  if (!productName) {
+    const { data } = await client.from("products").select("name").eq("id", row.productId).maybeSingle();
+    productName = data?.name ?? row.productId;
+  }
+  const { error } = await client.from("stock_movements").insert({
+    type: row.type,
+    product_id: row.productId,
+    product_name: productName,
+    qty: row.qty,
+    from_location: row.fromLocation ?? null,
+    to_location: row.toLocation ?? null,
+    reference: row.reference ?? null,
+    reason: row.reason ?? null,
+    actor_id: row.actorId ?? null,
+    actor_role: row.actorRole ?? null,
+    balance_before: row.balanceBefore ?? null,
+    balance_after: row.balanceAfter ?? null,
+  });
+  if (error) throw error;
+}
+
+// A sale or void must still change lounge stock when the ledger table is not there yet.
+async function rememberStockMovement(client, row) {
+  try {
+    await recordStockMovement(client, row);
+  } catch (e) {
+    console.error("Stock ledger row was not saved:", e?.message || e);
+  }
+}
+
+const MOVEMENT_TYPES = ["RECEIPT", "TRANSFER", "ADJUSTMENT", "COUNT", "SALE", "VOID"];
+
+/** Stock ledger, newest first. Not the audit log. */
+export async function listStockMovements({ from, to, type, location, productId, limit } = {}) {
+  const client = await supabase();
+  const max = Math.min(Math.max(Number(limit) || 500, 1), 2000);
+  let query = client.from("stock_movements").select("*").order("created_at", { ascending: false }).limit(max);
+
+  const fromIso = dayStartIso(from);
+  const toIso = nextDayStartIso(to);
+  if (fromIso) query = query.gte("created_at", fromIso);
+  if (toIso) query = query.lt("created_at", toIso);
+
+  const t = String(type ?? "").toUpperCase();
+  if (MOVEMENT_TYPES.includes(t)) query = query.eq("type", t);
+
+  const loc = String(location ?? "").toLowerCase();
+  if (loc === "lounge" || loc === "warehouse") {
+    query = query.or(`from_location.eq.${loc},to_location.eq.${loc}`);
+  }
+  if (productId) query = query.eq("product_id", String(productId));
+
+  const { data, error } = await query;
+  if (error) throw error;
+  const rows = (data ?? []).map(movementRow);
+  const names = await getUserNames(rows.map((r) => r.actorId));
+  for (const r of rows) r.actorName = names.get(String(r.actorId)) ?? r.actorId;
+  return rows;
+}
+
+function parseJsonText(value) {
+  if (value == null) return null;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+/** Audit log entries, newest first. `from` is inclusive; a date `to` includes that whole UTC day. */
+export async function listAuditLog({ from, to, action, limit } = {}) {
+  const client = await supabase();
+  const max = Math.min(Math.max(Number(limit) || 200, 1), 1000);
+  let query = client.from("audit_log").select("*").order("timestamp", { ascending: false }).limit(max);
+
+  const fromIso = dayStartIso(from);
+  const toIso = nextDayStartIso(to);
+  if (fromIso) query = query.gte("timestamp", fromIso);
+  if (toIso) query = query.lt("timestamp", toIso);
+  if (action) query = query.eq("action", String(action));
+
+  const { data, error } = await query;
+  if (error) throw error;
+  const names = await getUserNames((data ?? []).flatMap((r) => [r.actor_id, r.approver_id]));
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    action: r.action,
+    actorId: r.actor_id,
+    actorName: names.get(String(r.actor_id)) ?? r.actor_id,
+    actorRole: r.actor_role ?? null,
+    approverId: r.approver_id ?? null,
+    approverName: r.approver_id ? names.get(String(r.approver_id)) ?? r.approver_id : null,
+    entityType: r.entity_type ?? null,
+    entityId: r.entity_id ?? null,
+    before: parseJsonText(r.before_json),
+    after: parseJsonText(r.after_json),
+    reasonCode: r.reason_code ?? null,
+    timestamp: r.timestamp,
+  }));
 }
 
 export async function writeAudit(entry) {
