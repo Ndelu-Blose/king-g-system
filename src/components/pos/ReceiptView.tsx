@@ -85,12 +85,12 @@ export function ReceiptView({ receipt, onClose, showPrintButton = true }: Receip
             <span>Subtotal</span>
             <span className="tabular-nums whitespace-nowrap">R{receipt.subtotal.toFixed(2)}</span>
           </div>
-          <div className="row flex justify-between gap-4 mt-1">
-            <span>{receipt.vat > 0 ? 'VAT (15%)' : 'VAT'}</span>
-            <span className="tabular-nums whitespace-nowrap">
-              {receipt.vat > 0 ? `R${receipt.vat.toFixed(2)}` : 'Not added'}
-            </span>
-          </div>
+          {receipt.vat > 0 && (
+            <div className="row flex justify-between gap-4 mt-1">
+              <span>VAT (15%)</span>
+              <span className="tabular-nums whitespace-nowrap">R{receipt.vat.toFixed(2)}</span>
+            </div>
+          )}
           <div className="row grand mt-2 flex justify-between gap-4 text-base font-bold">
             <span>Total</span>
             <span className="tabular-nums whitespace-nowrap">R{receipt.total.toFixed(2)}</span>

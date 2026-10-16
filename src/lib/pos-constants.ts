@@ -1,9 +1,8 @@
-/** VAT rate (e.g. 0.15 = 15%). Applied to subtotal to get grand total. */
-export const VAT_RATE = 0.15;
+/** VAT is not added to sales. The rate stays here for when the lounge turns it back on. */
+export const VAT_RATE = 0;
 
-/** VAT for a sale. Zero when the cashier has turned VAT off. */
-export function saleVat(subtotal: number, includeVat: boolean): number {
-  if (!includeVat) return 0;
+/** VAT for a sale. Zero while VAT_RATE is 0. */
+export function saleVat(subtotal: number): number {
   return Math.round(subtotal * VAT_RATE * 100) / 100;
 }
 

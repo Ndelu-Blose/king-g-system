@@ -29,7 +29,7 @@ interface PaymentModalProps {
 type Step = 'method' | 'cash' | 'card' | 'eft' | 'split' | 'complete';
 
 export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
-  const { cart, clearCart, includeVat, setIncludeVat } = useCart();
+  const { cart, clearCart } = useCart();
   const { user } = useAuth();
   const recordSaleToShift = useShift().recordSale;
   const [step, setStep] = useState<Step>('method');
@@ -40,7 +40,7 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
   const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   const subtotal = useMemo(() => cart.reduce((sum, c) => sum + c.unitPrice * c.qty, 0), [cart]);
-  const vat = useMemo(() => saleVat(subtotal, includeVat), [subtotal, includeVat]);
+  const vat = useMemo(() => saleVat(subtotal), [subtotal]);
   const grandTotal = useMemo(() => Math.round((subtotal + vat) * 100) / 100, [subtotal, vat]);
 
   const cashNum = parseFloat(cashReceived) || 0;
@@ -195,22 +195,9 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
           </div>
         ) : (
           <>
-            <div className="text-center mb-6 space-y-3">
-              <p className="text-muted-foreground text-sm">Grand total</p>
+            <div className="text-center mb-6">
+              <p className="text-muted-foreground text-sm">Total</p>
               <p className={cn('text-4xl font-bold gold-text tabular-nums')}>R{grandTotal.toFixed(2)}</p>
-              <button
-                type="button"
-                onClick={() => setIncludeVat(!includeVat)}
-                aria-pressed={includeVat}
-                className={cn(
-                  'w-full rounded-xl border py-3 text-sm font-semibold touch-manipulation',
-                  includeVat
-                    ? 'border-border bg-secondary text-foreground'
-                    : 'border-destructive bg-destructive/15 text-destructive'
-                )}
-              >
-                {includeVat ? 'VAT on · tap to leave it off' : 'No VAT · tap to add it back'}
-              </button>
             </div>
 
             {step === 'method' && (
