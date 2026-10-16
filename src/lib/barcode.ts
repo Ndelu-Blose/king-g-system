@@ -1,6 +1,10 @@
 /** Strip scanner control characters (CR, Tab, GS) and surrounding spaces. Leading zeros stay. */
 export function normalizeBarcode(raw: string): string {
-  // Built from a string so ESLint does not flag control characters in a regex literal.
-  const ctrlRe = new RegExp('[\\x00-\\x1F\\x7F]', 'g');
-  return String(raw ?? '').replace(ctrlRe, '').trim();
+  const s = String(raw ?? '');
+  let out = '';
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code > 0x1f && code !== 0x7f) out += s[i];
+  }
+  return out.trim();
 }
