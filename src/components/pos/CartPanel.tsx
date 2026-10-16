@@ -3,7 +3,7 @@ import { Plus, Minus, Trash2, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
-import { VAT_RATE, getPlaceholderImageUrl } from '@/lib/pos-constants';
+import { saleVat, getPlaceholderImageUrl } from '@/lib/pos-constants';
 import { cn } from '@/lib/utils';
 
 function QtyField({
@@ -74,6 +74,8 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
     setLineQty,
     removeItem,
     focusScanInput,
+    includeVat,
+    setIncludeVat,
     total,
   } = useCart();
   const listRef = useRef<HTMLDivElement>(null);
@@ -86,7 +88,7 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
   }, [lineCount]);
 
   const subtotal = useMemo(() => cart.reduce((sum, c) => sum + c.unitPrice * c.qty, 0), [cart]);
-  const vat = useMemo(() => Math.round(subtotal * VAT_RATE * 100) / 100, [subtotal]);
+  const vat = useMemo(() => saleVat(subtotal, includeVat), [subtotal, includeVat]);
   const grandTotal = useMemo(() => Math.round((subtotal + vat) * 100) / 100, [subtotal, vat]);
 
   return (
@@ -208,9 +210,22 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
           <span className="tabular-nums text-foreground">R{subtotal.toFixed(2)}</span>
         </div>
         <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">VAT (15%)</span>
-          <span className="tabular-nums text-foreground">R{vat.toFixed(2)}</span>
+          <span className="text-muted-foreground">{includeVat ? 'VAT (15%)' : 'VAT'}</span>
+          <span className="tabular-nums text-foreground">{includeVat ? `R${vat.toFixed(2)}` : 'Not added'}</span>
         </div>
+        <button
+          type="button"
+          onClick={() => setIncludeVat(!includeVat)}
+          aria-pressed={includeVat}
+          className={cn(
+            'w-full rounded-xl border py-3 text-sm font-semibold touch-manipulation',
+            includeVat
+              ? 'border-border bg-secondary text-foreground'
+              : 'border-destructive bg-destructive/15 text-destructive'
+          )}
+        >
+          {includeVat ? 'VAT on · tap to leave it off' : 'No VAT · tap to add it back'}
+        </button>
         <div className="flex justify-between text-base font-semibold pt-1 border-t border-border/50">
           <span className="text-foreground">Grand total</span>
           <span className="gold-text tabular-nums">R{grandTotal.toFixed(2)}</span>

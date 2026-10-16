@@ -29,6 +29,9 @@ interface CartContextValue {
   setLineQty: (productId: string, qty: number) => void;
   removeItem: (productId: string) => void;
   clearCart: () => void;
+  /** When false, this sale is saved with no VAT added. */
+  includeVat: boolean;
+  setIncludeVat: (include: boolean) => void;
   total: number;
   /** Ref to the scan input so we can refocus after add. Set by POS. */
   scanInputRef: React.RefObject<HTMLInputElement | null>;
@@ -44,6 +47,7 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 export function CartProvider({ children }: { children: ReactNode }) {
   const { getEffectivePrice } = useHappyHour();
   const [cart, setCart] = useState<CartLine[]>([]);
+  const [includeVat, setIncludeVat] = useState(true);
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [lastScanned, setLastScanned] = useState<LastScanned | null>(null);
   const [scanInputRefState, setScanInputRefState] = useState<React.RefObject<HTMLInputElement | null>>(emptyRef);
@@ -162,6 +166,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setCart([]);
     setSelectedLineId(null);
     setLastScanned(null);
+    setIncludeVat(true);
     refocusScan();
   }, [refocusScan]);
 
@@ -178,6 +183,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setLineQty,
     removeItem,
     clearCart,
+    includeVat,
+    setIncludeVat,
     total,
     scanInputRef,
     setScanInputRef,

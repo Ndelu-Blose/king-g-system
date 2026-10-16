@@ -1,6 +1,12 @@
 /** VAT rate (e.g. 0.15 = 15%). Applied to subtotal to get grand total. */
 export const VAT_RATE = 0.15;
 
+/** VAT for a sale. Zero when the cashier has turned VAT off. */
+export function saleVat(subtotal: number, includeVat: boolean): number {
+  if (!includeVat) return 0;
+  return Math.round(subtotal * VAT_RATE * 100) / 100;
+}
+
 /** Instant placeholder thumbnail (data URL) when product has no image. */
 export function getPlaceholderImageUrl(name: string): string {
   const letter = (name || '?').charAt(0).toUpperCase();

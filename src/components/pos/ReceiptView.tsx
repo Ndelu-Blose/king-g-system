@@ -93,8 +93,8 @@ export function ReceiptView({ receipt, onClose, showPrintButton = true }: Receip
             <span className="tabular-nums">R{receipt.subtotal.toFixed(2)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span>VAT (15%)</span>
-            <span className="tabular-nums">R{receipt.vat.toFixed(2)}</span>
+            <span>{receipt.vat > 0 ? 'VAT (15%)' : 'VAT'}</span>
+            <span className="tabular-nums">{receipt.vat > 0 ? `R${receipt.vat.toFixed(2)}` : 'Not added'}</span>
           </div>
           <div className="flex justify-between grand mt-2">
             <span>Total</span>
