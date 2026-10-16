@@ -1,6 +1,7 @@
 import type { User, UserRole } from './types';
 import { getApiBase, usesLocalApiProxy } from './api-base';
 import { isPasswordRecoveryFlow } from './recovery-session';
+import { toFriendlyMessage } from './friendly-error';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
 export const TOKEN_KEY = 'kingg_token';
@@ -107,7 +108,7 @@ export async function loginWithApi(email: string, password: string): Promise<Log
         return { ok: false, error: mergedMessage };
       } catch (e) {
         const msg = e instanceof Error ? e.message : supabaseResult.error;
-        return { ok: false, error: msg };
+        return { ok: false, error: toFriendlyMessage(msg) };
       }
     }
 

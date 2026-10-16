@@ -73,6 +73,7 @@ export interface BlindTransferCopyLine {
 
 import { getApiBase } from './api-base';
 import { getFreshAccessToken } from './auth-api';
+import { toFriendlyMessage } from './friendly-error';
 import { normalizeBarcode } from './barcode';
 
 const API_BASE = getApiBase();
@@ -102,6 +103,14 @@ function looksLikeUnauthorized(err: unknown): boolean {
   return lower.includes('401') || lower.includes('unauthorized');
 }
 
+function shownError(body: unknown, fallback: string): Error {
+  const raw =
+    body && typeof body === 'object' && 'error' in body && typeof (body as { error?: unknown }).error === 'string'
+      ? (body as { error: string }).error
+      : '';
+  return new Error(toFriendlyMessage(raw.trim() ? raw : fallback));
+}
+
 async function authHeaders(): Promise<Record<string, string>> {
   const token = await getFreshAccessToken();
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -112,7 +121,7 @@ async function authHeaders(): Promise<Record<string, string>> {
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { headers: await authHeaders(), cache: 'no-store' });
   if (res.status === 404) throw new Error('NOT_FOUND');
-  if (!res.ok) throw new Error(`API ${res.status}`);
+  if (!res.ok) throw new Error(toFriendlyMessage(`API ${res.status}`));
   return res.json();
 }
 
@@ -139,7 +148,7 @@ async function apiPost<T>(path: string, body: unknown, options?: { idempotencyKe
     if (res.status === 401) {
       throw new Error('Your session expired. Sign out and sign in again.');
     }
-    throw new Error((err as { error?: string }).error || `Something went wrong. Please try again or contact support.`);
+    throw new Error(toFriendlyMessage((err as { error?: string }).error || 'Something went wrong. Please try again or ask a manager.'));
   }
   return res.json();
 }
@@ -152,7 +161,7 @@ async function apiPut<T>(path: string, body: unknown): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `API ${res.status}`);
+    throw new Error(toFriendlyMessage((err as { error?: string }).error || `API ${res.status}`));
   }
   return res.json();
 }
@@ -164,7 +173,7 @@ async function apiDelete<T>(path: string): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `API ${res.status}`);
+    throw new Error(toFriendlyMessage((err as { error?: string }).error || `API ${res.status}`));
   }
   return res.json();
 }
@@ -177,7 +186,7 @@ async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || `API ${res.status}`);
+    throw new Error(toFriendlyMessage((err as { error?: string }).error || `API ${res.status}`));
   }
   return res.json();
 }
@@ -231,7 +240,7 @@ export async function getProductByBarcode(barcode: string): Promise<ProductWithS
       .select('id,name,barcode,category,base_price,cost_price,size_ml,image,inventory(lounge_qty)')
       .eq('barcode', trimmed)
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(toFriendlyMessage(error.message));
     if (!data) return null;
     return {
       id: data.id,
@@ -263,7 +272,7 @@ export async function searchProducts(query: string, limit = 20): Promise<Product
       .limit(limit);
     if (q) req = req.or(`name.ilike.%${q}%,barcode.ilike.%${q}%,category.ilike.%${q}%`);
     const { data, error } = await req;
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(toFriendlyMessage(error.message));
     return (data ?? []).map((p) => ({
       id: p.id,
       name: p.name,
@@ -290,11 +299,11 @@ export async function getAllProducts(): Promise<ProductWithStock[]> {
     const { data: products, error: pErr } = await supabase
       .from('products')
       .select('id,name,barcode,category,base_price,cost_price,size_ml,image');
-    if (pErr) throw new Error(pErr.message);
+    if (pErr) throw new Error(toFriendlyMessage(pErr.message));
     const { data: inventoryRows, error: iErr } = await supabase
       .from('inventory')
       .select('product_id,total_qty');
-    if (iErr) throw new Error(iErr.message);
+    if (iErr) throw new Error(toFriendlyMessage(iErr.message));
     const stockMap = new Map((inventoryRows ?? []).map((r) => [r.product_id, r.total_qty]));
     return (products ?? []).map((p) => ({
       id: p.id,
@@ -321,12 +330,12 @@ export async function getInventoryBalances(): Promise<InventoryBalance[]> {
     const { data: products, error: pErr } = await supabase
       .from('products')
       .select('id,name,category,base_price,cost_price');
-    if (pErr) throw new Error(pErr.message);
+    if (pErr) throw new Error(toFriendlyMessage(pErr.message));
 
     const { data: invRows, error: iErr } = await supabase
       .from('inventory')
       .select('product_id,total_qty,lounge_qty,warehouse_qty');
-    if (iErr) throw new Error(iErr.message);
+    if (iErr) throw new Error(toFriendlyMessage(iErr.message));
 
     const invMap = new Map((invRows ?? []).map((r) => [r.product_id, r]));
     return (products ?? []).map((p) => {
@@ -354,7 +363,7 @@ export async function getInventoryBalances(): Promise<InventoryBalance[]> {
 export async function getCategories(): Promise<string[]> {
   if (USE_DIRECT_SUPABASE) {
     const { data, error } = await supabase.from('products').select('category');
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(toFriendlyMessage(error.message));
     const cats = Array.from(new Set((data ?? []).map((d) => d.category).filter(Boolean)));
     return ['All', ...cats];
   }
@@ -393,12 +402,12 @@ export async function writeAuditLog(entry: AuditWriteEntry): Promise<void> {
 export async function voidSaleApi(saleId: string, reasonCode?: string): Promise<{ ok: true }> {
   if (USE_DIRECT_SUPABASE) {
     const { data: sale, error: saleError } = await supabase.from('sales').select('*').eq('id', saleId).single();
-    if (saleError) throw new Error(saleError.message);
+    if (saleError) throw new Error(toFriendlyMessage(saleError.message));
     if (!sale) throw new Error('Sale not found');
     if (sale.status === 'void') throw new Error('Sale is already voided');
 
     const { data: items, error: itemsError } = await supabase.from('sale_items').select('*').eq('sale_id', saleId);
-    if (itemsError) throw new Error(itemsError.message);
+    if (itemsError) throw new Error(toFriendlyMessage(itemsError.message));
 
     for (const item of items ?? []) {
       const restoreQty = Math.max(0, Number(item.qty) || 0);
@@ -409,18 +418,18 @@ export async function voidSaleApi(saleId: string, reasonCode?: string): Promise<
         .select('total_qty')
         .eq('product_id', item.product_id)
         .single();
-      if (invError) throw new Error(invError.message);
-      if (!inv) throw new Error(`Inventory row not found for product ${item.product_id}`);
+      if (invError) throw new Error(toFriendlyMessage(invError.message));
+      if (!inv) throw new Error(toFriendlyMessage(`Inventory row not found for product ${item.product_id}`));
 
       const { error: invUpdateError } = await supabase
         .from('inventory')
         .update({ total_qty: (inv.total_qty ?? 0) + restoreQty })
         .eq('product_id', item.product_id);
-      if (invUpdateError) throw new Error(invUpdateError.message);
+      if (invUpdateError) throw new Error(toFriendlyMessage(invUpdateError.message));
     }
 
     const { error: statusError } = await supabase.from('sales').update({ status: 'void' }).eq('id', saleId);
-    if (statusError) throw new Error(statusError.message);
+    if (statusError) throw new Error(toFriendlyMessage(statusError.message));
 
     await writeAuditLog({
       action: 'void.completed',
@@ -443,7 +452,7 @@ export async function voidSaleApi(saleId: string, reasonCode?: string): Promise<
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error || `Void failed (${res.status})`);
+    throw shownError(data, `Void failed (${res.status})`);
   }
   return { ok: true };
 }
@@ -484,8 +493,8 @@ export async function receiveStockApi(
       .select('total_qty,lounge_qty,warehouse_qty')
       .eq('product_id', payload.productId)
       .single();
-    if (error) throw new Error(error.message);
-    if (!inv) throw new Error(`Inventory row not found for product ${payload.productId}`);
+    if (error) throw new Error(toFriendlyMessage(error.message));
+    if (!inv) throw new Error(toFriendlyMessage(`Inventory row not found for product ${payload.productId}`));
 
     const qty = Math.max(0, Number(payload.qty) || 0);
     const next = {
@@ -495,7 +504,7 @@ export async function receiveStockApi(
     };
 
     const { error: updErr } = await supabase.from('inventory').update(next).eq('product_id', payload.productId);
-    if (updErr) throw new Error(updErr.message);
+    if (updErr) throw new Error(toFriendlyMessage(updErr.message));
 
     return { ok: true, result: next };
   }
@@ -507,7 +516,7 @@ export async function receiveStockApi(
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error || `Receive failed (${res.status})`);
+    throw shownError(data, `Receive failed (${res.status})`);
   }
   const body = (await res.json()) as {
     ok: boolean;
@@ -596,7 +605,7 @@ export async function saveIncidentReport(payload: {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error || `Could not save the incident (${res.status})`);
+    throw shownError(data, `Could not save the incident (${res.status})`);
   }
   return res.json();
 }
@@ -609,7 +618,7 @@ export async function resolveIncidentReport(id: string): Promise<void> {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error || `Could not resolve the incident (${res.status})`);
+    throw shownError(data, `Could not resolve the incident (${res.status})`);
   }
 }
 
@@ -626,7 +635,7 @@ export async function writeOffStockApi(payload: {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error || `Write-off failed (${res.status})`);
+    throw shownError(data, `Write-off failed (${res.status})`);
   }
 }
 
@@ -643,7 +652,7 @@ export async function transferStockApi(payload: {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error || `Transfer failed (${res.status})`);
+    throw shownError(data, `Transfer failed (${res.status})`);
   }
 }
 
@@ -655,7 +664,7 @@ export async function applyStockCountApi(productId: string, totalQty: number): P
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error((data as { error?: string }).error || `Stock count failed (${res.status})`);
+    throw shownError(data, `Stock count failed (${res.status})`);
   }
 }
 
@@ -737,7 +746,7 @@ export async function saveIntakeDraftApi(payload: DeliveryIntakeApiPayload): Pro
           })
           .select('*')
           .single();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(toFriendlyMessage(error.message));
     return {
       header: {
         id: data.id,
@@ -777,7 +786,7 @@ export async function saveIntakeDraftApi(payload: DeliveryIntakeApiPayload): Pro
 export async function saveExpectedLinesApi(intakeId: string, lines: DeliveryLineApiPayload[]): Promise<DeliveryIntakeApiResponse> {
   if (USE_DIRECT_SUPABASE) {
     const { error: delErr } = await supabase.from('delivery_intake_lines').delete().eq('intake_id', intakeId);
-    if (delErr) throw new Error(delErr.message);
+    if (delErr) throw new Error(toFriendlyMessage(delErr.message));
     const rows = lines.map((line) => ({
       id: line.id,
       intake_id: intakeId,
@@ -795,16 +804,16 @@ export async function saveExpectedLinesApi(intakeId: string, lines: DeliveryLine
       destination_location: line.destinationLocation ?? null,
     }));
     const { error: insErr } = await supabase.from('delivery_intake_lines').insert(rows);
-    if (insErr) throw new Error(insErr.message);
+    if (insErr) throw new Error(toFriendlyMessage(insErr.message));
     const { data: header, error: hErr } = await supabase
       .from('delivery_intakes')
       .update({ status: 'expected_captured', updated_at: new Date().toISOString() })
       .eq('id', intakeId)
       .select('*')
       .single();
-    if (hErr) throw new Error(hErr.message);
+    if (hErr) throw new Error(toFriendlyMessage(hErr.message));
     const { data: savedLines, error: lErr } = await supabase.from('delivery_intake_lines').select('*').eq('intake_id', intakeId);
-    if (lErr) throw new Error(lErr.message);
+    if (lErr) throw new Error(toFriendlyMessage(lErr.message));
     return {
       header: {
         id: header.id,
@@ -872,7 +881,7 @@ export async function saveVerificationApi(
           destination_location: line.destinationLocation ?? null,
         })
         .eq('id', line.id);
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(toFriendlyMessage(error.message));
     }
     const { data: header, error: hErr } = await supabase
       .from('delivery_intakes')
@@ -880,9 +889,9 @@ export async function saveVerificationApi(
       .eq('id', intakeId)
       .select('*')
       .single();
-    if (hErr) throw new Error(hErr.message);
+    if (hErr) throw new Error(toFriendlyMessage(hErr.message));
     const { data: savedLines, error: lErr } = await supabase.from('delivery_intake_lines').select('*').eq('intake_id', intakeId);
-    if (lErr) throw new Error(lErr.message);
+    if (lErr) throw new Error(toFriendlyMessage(lErr.message));
     return {
       header: {
         id: header.id,
@@ -925,7 +934,7 @@ export async function saveVerificationApi(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || 'Failed to save verification');
+    throw shownError(err, 'Failed to save verification');
   }
   return res.json();
 }
@@ -933,7 +942,7 @@ export async function saveVerificationApi(
 export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntakeApiResponse> {
   if (USE_DIRECT_SUPABASE) {
     const { data: lines, error: lErr } = await supabase.from('delivery_intake_lines').select('*').eq('intake_id', intakeId);
-    if (lErr) throw new Error(lErr.message);
+    if (lErr) throw new Error(toFriendlyMessage(lErr.message));
     for (const line of lines ?? []) {
       const accepted = Number(line.accepted_qty) || 0;
       if (accepted <= 0) continue;
@@ -942,7 +951,7 @@ export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntake
         .select('product_id,total_qty,lounge_qty,warehouse_qty')
         .eq('product_id', line.product_id)
         .single();
-      if (invErr) throw new Error(invErr.message);
+      if (invErr) throw new Error(toFriendlyMessage(invErr.message));
       const isBackStore = String(line.destination_location || '').toLowerCase().includes('back store');
       const next = {
         total_qty: (inv.total_qty ?? 0) + accepted,
@@ -950,7 +959,7 @@ export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntake
         warehouse_qty: (inv.warehouse_qty ?? 0) + (isBackStore ? 0 : accepted),
       };
       const { error: updErr } = await supabase.from('inventory').update(next).eq('product_id', line.product_id);
-      if (updErr) throw new Error(updErr.message);
+      if (updErr) throw new Error(toFriendlyMessage(updErr.message));
     }
     const { data: header, error: hErr } = await supabase
       .from('delivery_intakes')
@@ -962,9 +971,9 @@ export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntake
       .eq('id', intakeId)
       .select('*')
       .single();
-    if (hErr) throw new Error(hErr.message);
+    if (hErr) throw new Error(toFriendlyMessage(hErr.message));
     const { data: savedLines, error: linesErr } = await supabase.from('delivery_intake_lines').select('*').eq('intake_id', intakeId);
-    if (linesErr) throw new Error(linesErr.message);
+    if (linesErr) throw new Error(toFriendlyMessage(linesErr.message));
     return {
       header: {
         id: header.id,
@@ -1006,7 +1015,7 @@ export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntake
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || 'Failed to confirm intake');
+    throw shownError(err, 'Failed to confirm intake');
   }
   return res.json();
 }
@@ -1014,13 +1023,13 @@ export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntake
 export async function generateBlindCopyApi(intakeId: string): Promise<BlindCopyApiResponse> {
   if (USE_DIRECT_SUPABASE) {
     const { data: intake, error: iErr } = await supabase.from('delivery_intakes').select('*').eq('id', intakeId).single();
-    if (iErr) throw new Error(iErr.message);
+    if (iErr) throw new Error(toFriendlyMessage(iErr.message));
     const { data: lines, error: lErr } = await supabase
       .from('delivery_intake_lines')
       .select('*')
       .eq('intake_id', intakeId)
       .gt('accepted_qty', 0);
-    if (lErr) throw new Error(lErr.message);
+    if (lErr) throw new Error(toFriendlyMessage(lErr.message));
     const blindCopyNumber = `BTC-${Date.now()}`;
     const { data: header, error: hErr } = await supabase
       .from('blind_transfer_copies')
@@ -1035,7 +1044,7 @@ export async function generateBlindCopyApi(intakeId: string): Promise<BlindCopyA
       })
       .select('*')
       .single();
-    if (hErr) throw new Error(hErr.message);
+    if (hErr) throw new Error(toFriendlyMessage(hErr.message));
     const blindLines = (lines ?? []).map((line) => ({
       blind_copy_id: header.id,
       product_id: line.product_id,
@@ -1047,7 +1056,7 @@ export async function generateBlindCopyApi(intakeId: string): Promise<BlindCopyA
     }));
     if (blindLines.length) {
       const { error: blErr } = await supabase.from('blind_transfer_copy_lines').insert(blindLines);
-      if (blErr) throw new Error(blErr.message);
+      if (blErr) throw new Error(toFriendlyMessage(blErr.message));
     }
     return {
       header: {
@@ -1072,7 +1081,7 @@ export async function generateBlindCopyApi(intakeId: string): Promise<BlindCopyA
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || 'Failed to generate blind copy');
+    throw shownError(err, 'Failed to generate blind copy');
   }
   return res.json();
 }
@@ -1085,7 +1094,7 @@ export async function issueBlindCopyApi(blindCopyId: string): Promise<BlindCopyA
       .eq('id', blindCopyId)
       .select('*')
       .single();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(toFriendlyMessage(error.message));
     return {
       header: {
         id: header.id,
@@ -1109,7 +1118,7 @@ export async function issueBlindCopyApi(blindCopyId: string): Promise<BlindCopyA
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error((err as { error?: string }).error || 'Failed to issue blind copy');
+    throw shownError(err, 'Failed to issue blind copy');
   }
   return res.json();
 }
@@ -1143,14 +1152,14 @@ export async function getTransactionsFromApi(cashierId?: string | null): Promise
   if (cashierId) salesReq = salesReq.eq('cashier_id', cashierId);
 
   const { data: sales, error: salesError } = await salesReq;
-  if (salesError) throw new Error(salesError.message);
+  if (salesError) throw new Error(toFriendlyMessage(salesError.message));
 
   const saleIds = (sales ?? []).map((sale) => sale.id);
   const { data: items, error: itemsError } = saleIds.length
     ? await supabase.from('sale_items').select('*').in('sale_id', saleIds)
     : { data: [], error: null };
 
-  if (itemsError) throw new Error(itemsError.message);
+  if (itemsError) throw new Error(toFriendlyMessage(itemsError.message));
 
   return (sales ?? []).map((sale) => ({
     id: sale.id,
@@ -1250,7 +1259,7 @@ export async function createHelpRequest(payload: HelpRequestPayload): Promise<{ 
     read_at: null,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(toFriendlyMessage(error.message));
   return { id, createdAt };
 }
 
@@ -1303,7 +1312,7 @@ export async function getHelpRequests(status?: string | null): Promise<HelpReque
   if (status) req = req.eq('status', status);
 
   const { data, error } = await req;
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(toFriendlyMessage(error.message));
 
   return (data ?? []).map((r) => ({
     id: r.id,
@@ -1401,6 +1410,6 @@ export async function acknowledgeHelpRequest(id: string, acknowledgedBy: string)
       acknowledged_by: acknowledgedBy,
     })
     .eq('id', id);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(toFriendlyMessage(error.message));
   return true;
 }

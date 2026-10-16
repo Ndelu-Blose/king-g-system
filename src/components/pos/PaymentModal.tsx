@@ -16,6 +16,7 @@ import { VAT_RATE } from '@/lib/pos-constants';
 import { ReceiptView } from '@/components/pos/ReceiptView';
 import type { PaymentMethod, ReceiptData } from '@/types/pos';
 import { cn } from '@/lib/utils';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 
 const QUICK_CASH = [50, 100, 200, 500];
@@ -125,9 +126,7 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
         idempotencyKeyRef.current = crypto.randomUUID();
       } catch (error) {
         toast.error(
-          error instanceof Error && error.message
-            ? error.message
-            : 'Payment could not be completed. Please try again or contact support.'
+          friendlyErrorMessage(error, 'Payment could not be completed. Please try again or ask a manager.')
         );
       } finally {
         setProcessing(false);

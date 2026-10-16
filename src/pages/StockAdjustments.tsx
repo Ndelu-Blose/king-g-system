@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 
 const REASONS = [
@@ -55,7 +56,7 @@ export default function StockAdjustments() {
       setQty('');
       toast.success(`${qtyNum} removed from ${location} (${reasonCode === 'expired' ? 'expired' : 'broken bottle'}).`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not record the write-off.');
+      toast.error(friendlyErrorMessage(err, 'Could not record the write-off.'));
     } finally {
       setSaving(false);
     }

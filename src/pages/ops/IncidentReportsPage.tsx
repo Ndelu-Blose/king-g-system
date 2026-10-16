@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 import { BackButton } from '@/components/BackButton';
 import { validateUploadFile, uploadIncidentAttachment, getIncidentAttachmentUrl } from '@/lib/file-upload';
@@ -107,7 +108,7 @@ export default function IncidentReportsPage() {
       setAttachmentFile(null);
       toast.success('Incident report saved.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to save incident report.');
+      toast.error(friendlyErrorMessage(err, 'Failed to save incident report.'));
     } finally {
       setSubmitting(false);
     }
@@ -119,7 +120,7 @@ export default function IncidentReportsPage() {
       await queryClient.invalidateQueries({ queryKey: ['incidents'] });
       toast.success('Marked as resolved.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not resolve the incident.');
+      toast.error(friendlyErrorMessage(err, 'Could not resolve the incident.'));
     }
   };
 
@@ -258,7 +259,7 @@ export default function IncidentReportsPage() {
                           const url = await getIncidentAttachmentUrl(r.attachmentStoragePath!);
                           window.open(url, '_blank', 'noopener,noreferrer');
                         } catch (e) {
-                          toast.error(e instanceof Error ? e.message : 'Failed to open attachment');
+                          toast.error(friendlyErrorMessage(e, 'Failed to open attachment'));
                         }
                       }}
                     >

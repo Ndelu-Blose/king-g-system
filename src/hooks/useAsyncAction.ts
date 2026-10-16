@@ -1,18 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 
-const GENERIC_ERROR = 'Something went wrong. Please try again or contact support.';
-
-export function friendlyErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    const msg = error.message.trim();
-    if (/^API \d{3}$/.test(msg) || /prisma|supabase|postgres|pgrst/i.test(msg)) {
-      return GENERIC_ERROR;
-    }
-    return msg;
-  }
-  return GENERIC_ERROR;
-}
+export { friendlyErrorMessage };
 
 export type AsyncActionOptions = {
   successMessage?: string;

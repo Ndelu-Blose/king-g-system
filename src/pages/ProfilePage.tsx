@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 
 export default function ProfilePage() {
@@ -57,7 +58,7 @@ export default function ProfilePage() {
       refreshUser(updated);
       toast.success('Profile updated.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update profile');
+      toast.error(friendlyErrorMessage(err, 'Failed to update profile'));
     } finally {
       setSaving(false);
     }
@@ -82,7 +83,7 @@ export default function ProfilePage() {
       setConfirmPassword('');
       toast.success('Password changed.');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to change password');
+      toast.error(friendlyErrorMessage(err, 'Failed to change password'));
     } finally {
       setChangingPassword(false);
     }
@@ -96,7 +97,7 @@ export default function ProfilePage() {
       if (result.ok) {
         toast.success('If your account supports email reset, a link was sent to your inbox.');
       } else {
-        toast.error(result.error);
+        toast.error(friendlyErrorMessage(result.error, 'Could not send the reset email.'));
       }
     } finally {
       setSendingReset(false);

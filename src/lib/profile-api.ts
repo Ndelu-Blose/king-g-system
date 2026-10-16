@@ -1,6 +1,7 @@
 import type { User } from './types';
 import { authHeaders, getStoredToken } from './auth-api';
 import { getApiBase, usesLocalApiProxy } from './api-base';
+import { toFriendlyMessage } from './friendly-error';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
 export type ProfileUpdateInput = {
@@ -53,7 +54,7 @@ async function updateProfileViaSupabase(
     .eq('id', userId)
     .select('id,name,email,role,phone')
     .single();
-  if (error) throw new Error(error.message || 'Failed to update profile');
+  if (error) throw new Error(toFriendlyMessage(error.message || 'Failed to update profile'));
   return mapProfileRow(data);
 }
 
@@ -69,7 +70,7 @@ async function changePasswordViaSupabase(
   if (signInError) throw new Error('Current password is incorrect');
 
   const { error } = await getSupabase().auth.updateUser({ password: newPassword });
-  if (error) throw new Error(error.message || 'Failed to change password');
+  if (error) throw new Error(toFriendlyMessage(error.message || 'Failed to change password'));
 }
 
 export async function fetchProfile(): Promise<User | null> {
@@ -116,7 +117,7 @@ export async function updateProfile(input: ProfileUpdateInput): Promise<User> {
     const data = (await res.json().catch(() => ({}))) as { user?: User; error?: string };
     if (res.ok && data.user) return data.user;
     if (res.status >= 400 && res.status < 500) {
-      throw new Error(data.error || 'Failed to update profile');
+      throw new Error(toFriendlyMessage(data.error || 'Failed to update profile'));
     }
   }
 
@@ -126,7 +127,7 @@ export async function updateProfile(input: ProfileUpdateInput): Promise<User> {
 
   const { data: sessionData } = await getSupabase().auth.getSession();
   const authId = sessionData.session?.user?.id;
-  if (!authId) throw new Error('Not signed in');
+  if (!authId) throw new Error(toFriendlyMessage('Not signed in'));
 
   const { data: row } = await getSupabase()
     .from('users')
@@ -153,7 +154,7 @@ export async function changePassword(
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     if (res.ok) return;
     if (res.status >= 400 && res.status < 500) {
-      throw new Error(data.error || 'Failed to change password');
+      throw new Error(toFriendlyMessage(data.error || 'Failed to change password'));
     }
   }
 

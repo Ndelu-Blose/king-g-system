@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 import { BackButton } from '@/components/BackButton';
 
@@ -168,7 +169,7 @@ export default function Products() {
       toast.success(`"${name}" added.`);
       setAddProductOpen(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to add product.');
+      toast.error(friendlyErrorMessage(e, 'Failed to add product.'));
     } finally {
       setSaving(false);
     }
@@ -227,7 +228,7 @@ export default function Products() {
       toast.success(`"${name}" updated.`);
       setEditFullProduct(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to update product.');
+      toast.error(friendlyErrorMessage(e, 'Failed to update product.'));
     } finally {
       setSaving(false);
     }
@@ -241,7 +242,7 @@ export default function Products() {
       toast.success(`"${deleteProductTarget.name}" removed.`);
       setDeleteProductTarget(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to delete product.');
+      toast.error(friendlyErrorMessage(e, 'Failed to delete product.'));
     } finally {
       setSaving(false);
     }

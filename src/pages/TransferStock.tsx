@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 
 export default function TransferStock() {
@@ -53,7 +54,7 @@ export default function TransferStock() {
       setReason('');
       toast.success(`${qtyNum} unit(s) transferred from ${fromLocation} to ${toLocation}.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Transfer could not be saved.');
+      toast.error(friendlyErrorMessage(err, 'Transfer could not be saved.'));
     } finally {
       setTransferring(false);
     }

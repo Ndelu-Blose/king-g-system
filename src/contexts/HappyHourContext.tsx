@@ -8,6 +8,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 
 import { useAuth } from '@/lib/auth-context';
@@ -111,7 +112,7 @@ export function HappyHourProvider({ children }: { children: ReactNode }) {
     }
     const handle = window.setTimeout(() => {
       void savePricing({ discountPercent, productDiscounts }).catch((e) => {
-        toast.error(e instanceof Error ? e.message : 'Price change could not be saved.');
+        toast.error(friendlyErrorMessage(e, 'Price change could not be saved.'));
       });
     }, 250);
     return () => window.clearTimeout(handle);
