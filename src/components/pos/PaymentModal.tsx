@@ -185,9 +185,9 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
                 <Receipt className="w-8 h-8 text-success" />
               </div>
               <h3 className="font-display text-xl font-bold text-foreground">Payment complete</h3>
-              {receiptData.payments.some((p) => p.method === 'cash') && (
+              {receiptData.payments.some((p) => p.method === 'cash' && (p.change ?? 0) > 0) && (
                 <p className="text-2xl font-bold text-primary mt-2">
-                  Change: R{change.toFixed(2)}
+                  Change: R{(receiptData.payments.find((p) => p.method === 'cash')?.change ?? 0).toFixed(2)}
                 </p>
               )}
             </div>

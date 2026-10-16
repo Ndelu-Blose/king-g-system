@@ -33,13 +33,13 @@ export function ReceiptView({ receipt, onClose, showPrintButton = true }: Receip
             body { font-family: system-ui, sans-serif; padding: 24px; max-width: 320px; margin: 0 auto; font-size: 14px; }
             h1 { font-size: 18px; margin: 0 0 8px 0; }
             .meta { color: #666; font-size: 12px; margin-bottom: 16px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-            th { text-align: left; font-size: 11px; color: #666; border-bottom: 1px solid #eee; padding: 4px 0; }
-            td { padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
-            td.num { text-align: right; }
+            .item { padding: 8px 0; border-bottom: 1px solid #eee; }
+            .item-name { font-weight: 600; }
+            .row { display: flex; justify-content: space-between; gap: 16px; margin-top: 2px; }
+            .row span:last-child { white-space: nowrap; }
             .totals { margin-top: 12px; border-top: 2px solid #333; padding-top: 8px; }
-            .totals div { display: flex; justify-content: space-between; margin: 4px 0; }
-            .totals .grand { font-weight: bold; font-size: 16px; }
+            .totals .row { margin: 4px 0; }
+            .grand { font-weight: bold; font-size: 16px; }
             .footer { margin-top: 24px; font-size: 11px; color: #666; text-align: center; }
           </style>
         </head>
@@ -67,45 +67,53 @@ export function ReceiptView({ receipt, onClose, showPrintButton = true }: Receip
         <h1 className="text-lg font-bold border-b border-black/20 pb-2 mb-2">KING G</h1>
         <p className="text-xs text-gray-600 mb-4">Receipt #{receipt.saleId}</p>
         <p className="text-xs text-gray-600 mb-4">{dateStr}</p>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-300">
-              <th className="text-left py-1 font-medium">Item</th>
-              <th className="text-right py-1 font-medium">Qty</th>
-              <th className="text-right py-1 font-medium">Price</th>
-              <th className="text-right py-1 font-medium">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {receipt.items.map((item) => (
-              <tr key={`${item.productId}-${item.name}`} className="border-b border-gray-100">
-                <td className="py-1.5">{item.name}</td>
-                <td className="text-right py-1.5 tabular-nums">{item.qty}</td>
-                <td className="text-right py-1.5 tabular-nums">R{item.unitPrice.toFixed(2)}</td>
-                <td className="text-right py-1.5 tabular-nums">R{item.lineTotal.toFixed(2)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="totals mt-4 pt-3 border-t-2 border-gray-800">
-          <div className="flex justify-between text-sm">
+        <div className="text-sm">
+          {receipt.items.map((item) => (
+            <div key={`${item.productId}-${item.name}`} className="item border-b border-gray-200 py-2">
+              <p className="item-name font-medium">{item.name}</p>
+              <div className="row flex items-baseline justify-between gap-4">
+                <span className="text-gray-700">
+                  {item.qty} × R{item.unitPrice.toFixed(2)}
+                </span>
+                <span className="tabular-nums whitespace-nowrap">R{item.lineTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="totals mt-4 pt-3 border-t-2 border-gray-800 text-sm">
+          <div className="row flex justify-between gap-4">
             <span>Subtotal</span>
-            <span className="tabular-nums">R{receipt.subtotal.toFixed(2)}</span>
+            <span className="tabular-nums whitespace-nowrap">R{receipt.subtotal.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-sm">
+          <div className="row flex justify-between gap-4 mt-1">
             <span>{receipt.vat > 0 ? 'VAT (15%)' : 'VAT'}</span>
-            <span className="tabular-nums">{receipt.vat > 0 ? `R${receipt.vat.toFixed(2)}` : 'Not added'}</span>
+            <span className="tabular-nums whitespace-nowrap">
+              {receipt.vat > 0 ? `R${receipt.vat.toFixed(2)}` : 'Not added'}
+            </span>
           </div>
-          <div className="flex justify-between grand mt-2">
+          <div className="row grand mt-2 flex justify-between gap-4 text-base font-bold">
             <span>Total</span>
-            <span className="tabular-nums">R{receipt.total.toFixed(2)}</span>
+            <span className="tabular-nums whitespace-nowrap">R{receipt.total.toFixed(2)}</span>
           </div>
         </div>
         {receipt.payments.map((pay, i) => (
-          <div key={i} className="mt-2 text-sm">
-            <span className="capitalize">{pay.method}</span>: R{pay.amount.toFixed(2)}
+          <div key={i} className="mt-3 text-sm space-y-1">
+            {pay.method === 'cash' ? (
+              <div className="row flex justify-between gap-4">
+                <span>Cash received</span>
+                <span className="tabular-nums whitespace-nowrap">R{(pay.cashReceived ?? pay.amount).toFixed(2)}</span>
+              </div>
+            ) : (
+              <div className="row flex justify-between gap-4">
+                <span className="capitalize">{pay.method}</span>
+                <span className="tabular-nums whitespace-nowrap">R{pay.amount.toFixed(2)}</span>
+              </div>
+            )}
             {pay.change != null && pay.change > 0 && (
-              <span className="ml-2">Change: R{pay.change.toFixed(2)}</span>
+              <div className="row flex justify-between gap-4 font-medium">
+                <span>Change</span>
+                <span className="tabular-nums whitespace-nowrap">R{pay.change.toFixed(2)}</span>
+              </div>
             )}
           </div>
         ))}
