@@ -8,6 +8,10 @@ import { WRITE_OFF_REASONS, restoreToLounge, saleFromLounge, writeOffNext } from
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PRODUCT_SELECT = "id,name,barcode,category,base_price,cost_price,size_ml,image";
 
+function normalizeBarcode(barcode) {
+  return String(barcode || "").replace(/[\u0000-\u001F\u007F]/g, "").trim();
+}
+
 function mapProductRow(p, stock = 0) {
   return {
     id: p.id,
@@ -105,6 +109,48 @@ async function supabase() {
   return getSupabaseAdmin();
 }
 
+// Re-read and update only if the row is unchanged, so overlapping sales and
+// transfers cannot overwrite each other.
+async function withInventory(client, productId, compute) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const { data: inv, error } = await client
+      .from("inventory")
+      .select("total_qty,lounge_qty,warehouse_qty")
+      .eq("product_id", productId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!inv) return { ok: false, error: "Product not in inventory" };
+    const plan = compute(inv);
+    if (plan.error) return { ok: false, error: plan.error };
+    const { data, error: updErr } = await client
+      .from("inventory")
+      .update(plan.row)
+      .eq("product_id", productId)
+      .eq("total_qty", inv.total_qty)
+      .eq("lounge_qty", inv.lounge_qty)
+      .eq("warehouse_qty", inv.warehouse_qty)
+      .select("product_id");
+    if (updErr) throw updErr;
+    if (data?.length) return { ok: true, ...plan };
+    await new Promise((resolve) => setTimeout(resolve, 8 + Math.floor(Math.random() * 25)));
+  }
+  return { ok: false, error: "Stock changed while saving. Try again." };
+}
+
+async function revertInventory(client, productId, before, after) {
+  await client
+    .from("inventory")
+    .update({
+      total_qty: before.total,
+      lounge_qty: before.lounge,
+      warehouse_qty: before.warehouse,
+    })
+    .eq("product_id", productId)
+    .eq("total_qty", after.total)
+    .eq("lounge_qty", after.lounge)
+    .eq("warehouse_qty", after.warehouse);
+}
+
 export async function getAllProducts() {
   const client = await supabase();
   const { data: products, error: pErr } = await client
@@ -123,7 +169,7 @@ export async function getAllProducts() {
 
 export async function getProductByBarcode(barcode) {
   const client = await supabase();
-  const trimmed = String(barcode || "").trim();
+  const trimmed = normalizeBarcode(barcode);
   if (!trimmed) return null;
 
   const { data: product, error: pErr } = await client
@@ -135,15 +181,16 @@ export async function getProductByBarcode(barcode) {
   if (pErr) throw pErr;
   if (!product) return null;
 
+  // A sale is poured from the lounge, so the till must check lounge stock.
   const { data: inv, error: iErr } = await client
     .from("inventory")
-    .select("total_qty")
+    .select("lounge_qty")
     .eq("product_id", product.id)
     .maybeSingle();
 
   if (iErr) throw iErr;
 
-  return mapProductRow(product, inv?.total_qty ?? 0);
+  return mapProductRow(product, inv?.lounge_qty ?? 0);
 }
 
 export async function searchProducts(q, limit = 20) {
@@ -401,41 +448,52 @@ export async function receiveStock(productId, qty, location, { actorId, actorRol
   const loc = String(location || "warehouse").toLowerCase();
   const isLounge = loc === "lounge";
 
-  const { data: inv, error: iErr } = await client
-    .from("inventory")
-    .select("total_qty,lounge_qty,warehouse_qty")
-    .eq("product_id", productId)
-    .maybeSingle();
-
-  if (iErr) throw iErr;
-  if (!inv) return { ok: false, error: "Product not in inventory" };
-
-  const before = { total: inv.total_qty ?? 0, lounge: inv.lounge_qty ?? 0, warehouse: inv.warehouse_qty ?? 0 };
-
-  const next = {
-    total_qty: before.total + n,
-    lounge_qty: before.lounge + (isLounge ? n : 0),
-    warehouse_qty: before.warehouse + (isLounge ? 0 : n),
-  };
-
-  const { error: updErr } = await client
-    .from("inventory")
-    .update(next)
-    .eq("product_id", productId);
-  if (updErr) throw updErr;
-
-  const after = { ...before, ...{ total: next.total_qty, lounge: next.lounge_qty, warehouse: next.warehouse_qty } };
-
-  await writeAudit({
-    action: "goods.received",
-    actorId,
-    actorRole,
-    entityType: "inventory",
-    entityId: productId,
-    before: { ...before, invoiceNumber: invoiceNumber || null },
-    after: { ...after, receivedQty: n, location: loc },
-    reasonCode: null,
+  const saved = await withInventory(client, productId, (inv) => {
+    const before = {
+      total: Number(inv.total_qty ?? 0),
+      lounge: Number(inv.lounge_qty ?? 0),
+      warehouse: Number(inv.warehouse_qty ?? 0),
+    };
+    const row = {
+      total_qty: before.total + n,
+      lounge_qty: before.lounge + (isLounge ? n : 0),
+      warehouse_qty: before.warehouse + (isLounge ? 0 : n),
+    };
+    return {
+      row,
+      before,
+      after: { total: row.total_qty, lounge: row.lounge_qty, warehouse: row.warehouse_qty },
+    };
   });
+  if (!saved.ok) return saved;
+
+  const { before, after } = saved;
+  try {
+    await recordStockMovement(client, {
+      type: "RECEIPT",
+      productId,
+      qty: n,
+      toLocation: loc,
+      reference: invoiceNumber || null,
+      actorId,
+      actorRole,
+      balanceBefore: before,
+      balanceAfter: after,
+    });
+    await writeAudit({
+      action: "goods.received",
+      actorId,
+      actorRole,
+      entityType: "inventory",
+      entityId: productId,
+      before: { ...before, invoiceNumber: invoiceNumber || null },
+      after: { ...after, receivedQty: n, location: loc },
+      reasonCode: null,
+    });
+  } catch (e) {
+    await revertInventory(client, productId, before, after);
+    throw e;
+  }
 
   const result = { ok: true, before, after };
   if (idempotencyKey) {
@@ -455,29 +513,25 @@ export async function transferStock(productId, qty, from, to, { actorId, actorRo
   if (source === dest) return { ok: false, error: "Choose two different locations" };
 
   const client = await supabase();
-  const { data: inv, error } = await client
-    .from("inventory")
-    .select("total_qty,lounge_qty,warehouse_qty")
-    .eq("product_id", productId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!inv) return { ok: false, error: "Product not in inventory" };
-
-  const lounge = Number(inv.lounge_qty ?? 0);
-  const warehouse = Number(inv.warehouse_qty ?? 0);
-  const fromQty = source === "lounge" ? lounge : warehouse;
-  if (fromQty < n) return { ok: false, error: "Not enough stock in that location" };
-
-  const next = {
-    lounge_qty: source === "lounge" ? lounge - n : lounge + n,
-    warehouse_qty: source === "warehouse" ? warehouse - n : warehouse + n,
-    total_qty: lounge + warehouse,
-  };
-
-  const before = { lounge, warehouse, total: lounge + warehouse };
-  const after = { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty };
-  const { error: updErr } = await client.from("inventory").update(next).eq("product_id", productId);
-  if (updErr) throw updErr;
+  const saved = await withInventory(client, productId, (inv) => {
+    const lounge = Number(inv.lounge_qty ?? 0);
+    const warehouse = Number(inv.warehouse_qty ?? 0);
+    const fromQty = source === "lounge" ? lounge : warehouse;
+    if (fromQty < n) return { error: "Not enough stock in that location" };
+    const before = { lounge, warehouse, total: lounge + warehouse };
+    const row = {
+      lounge_qty: source === "lounge" ? lounge - n : lounge + n,
+      warehouse_qty: source === "warehouse" ? warehouse - n : warehouse + n,
+      total_qty: before.total,
+    };
+    return {
+      row,
+      before,
+      after: { lounge: row.lounge_qty, warehouse: row.warehouse_qty, total: row.total_qty },
+    };
+  });
+  if (!saved.ok) return saved;
+  const { before, after } = saved;
 
   try {
     await recordStockMovement(client, {
@@ -502,11 +556,7 @@ export async function transferStock(productId, qty, from, to, { actorId, actorRo
       reasonCode: null,
     });
   } catch (e) {
-    await client.from("inventory").update({
-      lounge_qty: lounge,
-      warehouse_qty: warehouse,
-      total_qty: before.total,
-    }).eq("product_id", productId);
+    await revertInventory(client, productId, before, after);
     throw e;
   }
 
@@ -545,16 +595,52 @@ export async function applyStockCount(productId, newTotalQty, { actorId, actorRo
   const { error: updErr } = await client.from("inventory").update(next).eq("product_id", productId);
   if (updErr) throw updErr;
 
-  await writeAudit({
-    action: "stock.count.applied",
-    actorId,
-    actorRole,
-    entityType: "inventory",
-    entityId: productId,
-    before: { lounge, warehouse, total: current },
-    after: { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty },
-    reasonCode: "stock_take",
-  });
+  const before = { lounge, warehouse, total: current };
+  const after = { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty };
+  try {
+    const loungeChanged = after.lounge !== before.lounge;
+    const warehouseChanged = after.warehouse !== before.warehouse;
+    let fromLocation = null;
+    let toLocation = null;
+    if (warehouseChanged && !loungeChanged) toLocation = "warehouse";
+    else if (loungeChanged && !warehouseChanged) toLocation = "lounge";
+    else if (before.warehouse > after.warehouse && after.lounge > before.lounge) {
+      fromLocation = "warehouse";
+      toLocation = "lounge";
+    } else if (before.lounge > after.lounge && after.warehouse > before.warehouse) {
+      fromLocation = "lounge";
+      toLocation = "warehouse";
+    }
+    await recordStockMovement(client, {
+      type: "COUNT",
+      productId,
+      qty: after.total - before.total,
+      fromLocation,
+      toLocation,
+      reason: "stock_take",
+      actorId,
+      actorRole,
+      balanceBefore: before,
+      balanceAfter: after,
+    });
+    await writeAudit({
+      action: "stock.count.applied",
+      actorId,
+      actorRole,
+      entityType: "inventory",
+      entityId: productId,
+      before,
+      after,
+      reasonCode: "stock_take",
+    });
+  } catch (e) {
+    await client.from("inventory").update({
+      lounge_qty: before.lounge,
+      warehouse_qty: before.warehouse,
+      total_qty: before.total,
+    }).eq("product_id", productId);
+    throw e;
+  }
 
   return { ok: true, after: { lounge: next.lounge_qty, warehouse: next.warehouse_qty, total: next.total_qty } };
 }
@@ -599,41 +685,31 @@ export async function writeOffStock(productId, qty, location, reasonCode, { acto
   if (!reason) return { ok: false, error: "Choose expired or broken" };
 
   const client = await supabase();
-  const { data: inv, error } = await client
-    .from("inventory")
-    .select("total_qty,lounge_qty,warehouse_qty")
-    .eq("product_id", productId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!inv) return { ok: false, error: "Product not in inventory" };
-
-  const lounge = Number(inv.lounge_qty ?? 0);
-  const warehouse = Number(inv.warehouse_qty ?? 0);
-  const total = Number(inv.total_qty ?? lounge + warehouse);
-  const next = writeOffNext({ lounge, warehouse, total, location, qty });
-  if (next.error) return { ok: false, error: next.error };
-
-  const row = {
-    lounge_qty: next.lounge,
-    warehouse_qty: next.warehouse,
-    total_qty: next.total,
-  };
-  const { error: updErr } = await client.from("inventory").update(row).eq("product_id", productId);
-  if (updErr) throw updErr;
-
-  const before = { lounge, warehouse, total };
-  const after = { lounge: next.lounge, warehouse: next.warehouse, total: next.total, qty: next.qty, location: next.location };
+  const saved = await withInventory(client, productId, (inv) => {
+    const lounge = Number(inv.lounge_qty ?? 0);
+    const warehouse = Number(inv.warehouse_qty ?? 0);
+    const total = Number(inv.total_qty ?? lounge + warehouse);
+    const next = writeOffNext({ lounge, warehouse, total, location, qty });
+    if (next.error) return { error: next.error };
+    return {
+      row: { lounge_qty: next.lounge, warehouse_qty: next.warehouse, total_qty: next.total },
+      before: { lounge, warehouse, total },
+      after: { lounge: next.lounge, warehouse: next.warehouse, total: next.total, qty: next.qty, location: next.location },
+    };
+  });
+  if (!saved.ok) return saved;
+  const { before, after } = saved;
   try {
     await recordStockMovement(client, {
       type: "ADJUSTMENT",
       productId,
-      qty: -next.qty,
-      fromLocation: next.location,
+      qty: -after.qty,
+      fromLocation: after.location,
       reason,
       actorId,
       actorRole,
       balanceBefore: before,
-      balanceAfter: { lounge: next.lounge, warehouse: next.warehouse, total: next.total },
+      balanceAfter: { lounge: after.lounge, warehouse: after.warehouse, total: after.total },
     });
     await writeAudit({
       action: "stock.written_off",
@@ -646,11 +722,7 @@ export async function writeOffStock(productId, qty, location, reasonCode, { acto
       reasonCode,
     });
   } catch (e) {
-    await client.from("inventory").update({
-      lounge_qty: lounge,
-      warehouse_qty: warehouse,
-      total_qty: total,
-    }).eq("product_id", productId);
+    await revertInventory(client, productId, before, after);
     throw e;
   }
 
@@ -766,34 +838,30 @@ export async function createSale(payload, cashierName = "") {
 
     // Sales leave the lounge. Warehouse stock stays until it is moved, expired, or broken.
     for (const [productId, requestedQty] of qtyByProduct.entries()) {
-      const { data: inv, error: invErr } = await client
-        .from("inventory")
-        .select("total_qty,lounge_qty,warehouse_qty")
-        .eq("product_id", productId)
-        .maybeSingle();
-      if (invErr) throw invErr;
-      if (!inv) throw new Error(`Inventory row not found for product ${productId}`);
-      const before = {
-        lounge: Number(inv.lounge_qty ?? 0),
-        warehouse: Number(inv.warehouse_qty ?? 0),
-        total: Number(inv.total_qty ?? 0),
-      };
-      const next = saleFromLounge({ ...before, qty: requestedQty });
-      if (next.error) throw new Error(`${next.error} for product ${productId}`);
-      const { error: updErr } = await client
-        .from("inventory")
-        .update({ lounge_qty: next.lounge, warehouse_qty: next.warehouse, total_qty: next.total })
-        .eq("product_id", productId);
-      if (updErr) throw updErr;
+      const saved = await withInventory(client, productId, (inv) => {
+        const before = {
+          lounge: Number(inv.lounge_qty ?? 0),
+          warehouse: Number(inv.warehouse_qty ?? 0),
+          total: Number(inv.total_qty ?? 0),
+        };
+        const next = saleFromLounge({ ...before, qty: requestedQty });
+        if (next.error) return { error: `${next.error} for product ${productId}` };
+        return {
+          row: { lounge_qty: next.lounge, warehouse_qty: next.warehouse, total_qty: next.total },
+          before,
+          after: { lounge: next.lounge, warehouse: next.warehouse, total: next.total, qty: next.qty },
+        };
+      });
+      if (!saved.ok) throw new Error(saved.error);
       await rememberStockMovement(client, {
         type: "SALE",
         productId,
-        qty: -next.qty,
+        qty: -saved.after.qty,
         fromLocation: "lounge",
         reference: id,
         actorId: payload.cashierId,
-        balanceBefore: before,
-        balanceAfter: { lounge: next.lounge, warehouse: next.warehouse, total: next.total },
+        balanceBefore: saved.before,
+        balanceAfter: { lounge: saved.after.lounge, warehouse: saved.after.warehouse, total: saved.after.total },
       });
     }
 

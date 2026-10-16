@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { KeyRound, Loader2, Mail, MoreHorizontal, Plus, Trash2, UserCheck, UserX } from 'lucide-react';
 import { BackButton } from '@/components/BackButton';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,10 @@ export default function UsersPage() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [addForm, setAddForm] = useState(emptyForm);
+  const [addFormKey, setAddFormKey] = useState(0);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   const [passwordTarget, setPasswordTarget] = useState<ManagedUser | null>(null);
   const [newPassword, setNewPassword] = useState('');
@@ -101,9 +105,10 @@ export default function UsersPage() {
 
   const handleAddUser = async () => {
     if (adding) return;
-    const name = addForm.name.trim();
-    const email = addForm.email.trim();
-    const password = addForm.password;
+    // Read the inputs directly. Edge can fill them without telling React.
+    const name = (nameRef.current?.value ?? addForm.name).trim();
+    const email = (emailRef.current?.value ?? addForm.email).trim();
+    const password = passwordRef.current?.value ?? addForm.password;
     if (!name) {
       toast.error('Name is required.');
       return;
@@ -126,6 +131,7 @@ export default function UsersPage() {
       }
       setAddOpen(false);
       setAddForm(emptyForm);
+      setAddFormKey((key) => key + 1);
       await loadUsers();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add user');
@@ -362,7 +368,13 @@ export default function UsersPage() {
         </table>
       </div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) setAddFormKey((key) => key + 1);
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add user</DialogTitle>
@@ -370,22 +382,40 @@ export default function UsersPage() {
               They will receive a welcome email with a link to set their password.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-2">
+          <form
+            key={addFormKey}
+            autoComplete="off"
+            className="grid gap-4 py-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleAddUser();
+            }}
+          >
+            {/* Edge fills the first email/password it finds with the saved login. */}
+            <input className="hidden" tabIndex={-1} aria-hidden="true" autoComplete="username" name="username" />
+            <input className="hidden" tabIndex={-1} aria-hidden="true" type="password" autoComplete="current-password" name="password" />
             <div className="grid gap-2">
               <Label htmlFor="user-name">Full name</Label>
               <Input
+                ref={nameRef}
                 id="user-name"
-                value={addForm.name}
-                onChange={(e) => setAddForm((p) => ({ ...p, name: e.target.value }))}
+                name="staff-full-name"
+                autoComplete="off"
+                defaultValue=""
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="user-email">Email</Label>
               <Input
+                ref={emailRef}
                 id="user-email"
-                type="email"
-                value={addForm.email}
-                onChange={(e) => setAddForm((p) => ({ ...p, email: e.target.value }))}
+                name="staff-email"
+                type="text"
+                inputMode="email"
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                defaultValue=""
               />
             </div>
             <div className="grid gap-2">
@@ -409,29 +439,30 @@ export default function UsersPage() {
             <div className="grid gap-2">
               <Label htmlFor="user-password">Password</Label>
               <Input
+                ref={passwordRef}
                 id="user-password"
+                name="staff-new-password"
                 type="password"
-                value={addForm.password}
-                onChange={(e) => setAddForm((p) => ({ ...p, password: e.target.value }))}
                 autoComplete="new-password"
+                defaultValue=""
               />
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="secondary" onClick={() => setAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button className="gold-gradient text-primary-foreground" onClick={handleAddUser} disabled={adding}>
-              {adding ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Creating…
-                </>
-              ) : (
-                'Add user'
-              )}
-            </Button>
-          </DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="gold-gradient text-primary-foreground" disabled={adding}>
+                {adding ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating…
+                  </>
+                ) : (
+                  'Add user'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

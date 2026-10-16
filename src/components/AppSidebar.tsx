@@ -368,20 +368,17 @@ export default function AppSidebar() {
               </NavLinkStyle>
             </div>
 
-            {/* Reports & promos — Senior Manager only */}
-            {user.role === 'senior_manager' && (
-              <>
-                <p className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reports & promos</p>
-                <div className="flex flex-col gap-0.5">
-                  <NavLinkStyle to="/reports" icon={BarChart3} isActive={pathname === '/reports' || pathname.startsWith('/reports/')}>
-                    Reports
-                  </NavLinkStyle>
-                  <NavLinkStyle to="/ops/promotions" icon={Percent} isActive={pathname === '/ops/promotions'}>
-                    Promotions
-                  </NavLinkStyle>
-                </div>
-              </>
-            )}
+            <p className="px-3 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Reports</p>
+            <div className="flex flex-col gap-0.5">
+              <NavLinkStyle to="/reports" icon={BarChart3} isActive={pathname === '/reports' || pathname.startsWith('/reports/')}>
+                Reports
+              </NavLinkStyle>
+              {user.role === 'senior_manager' && (
+                <NavLinkStyle to="/ops/promotions" icon={Percent} isActive={pathname === '/ops/promotions'}>
+                  Promotions
+                </NavLinkStyle>
+              )}
+            </div>
           </div>
         ) : null}
       </nav>

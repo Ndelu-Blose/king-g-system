@@ -127,13 +127,20 @@ export type CreateUserResult = ManagedUser & {
   emailError?: string | null;
 };
 
+function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export async function createUser(payload: {
   name: string;
   email: string;
   role: UserRole;
   password: string;
 }): Promise<CreateUserResult> {
-  const idempotencyKey = crypto.randomUUID();
+  const idempotencyKey = newIdempotencyKey();
   const created = await usersWritePost<CreateUserResult>('/api/users', payload, { idempotencyKey });
   if (!created.authUserId) {
     throw new Error('Account was created, but sign-in could not be set up. Contact an owner for help.');

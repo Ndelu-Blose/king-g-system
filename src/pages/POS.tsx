@@ -6,6 +6,7 @@ import { ProductGridSearch } from '@/components/pos/ProductGridSearch';
 import { PaymentModal } from '@/components/pos/PaymentModal';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/lib/auth-context';
+import { normalizeBarcode } from '@/lib/barcode';
 import { BackButton } from '@/components/BackButton';
 
 function playBeep() {
@@ -43,7 +44,6 @@ export default function POS() {
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [mode, setMode] = useState<'scan' | 'manual'>('scan');
-  const [scanValue, setScanValue] = useState('');
   const [scanError, setScanError] = useState(false);
   const [manualQuery, setManualQuery] = useState('');
 
@@ -64,8 +64,8 @@ export default function POS() {
     };
   }, [lastScanned, cart]);
 
-  const onScanSubmit = useCallback(async () => {
-    const code = scanValue.trim();
+  const onScanSubmit = useCallback(async (raw: string) => {
+    const code = normalizeBarcode(raw);
     if (!code) return;
 
     setScanError(false);
@@ -75,15 +75,12 @@ export default function POS() {
     if (result.success) {
       playBeep();
       toast.success('Added', { duration: 800 });
-      setScanValue('');
     } else if (result.reason === 'not_found') {
       setScanError(true);
-      setScanValue('');
     } else {
-      toast.error('Item is out of stock');
-      setScanValue('');
+      toast.error('Item is out of stock in the lounge');
     }
-  }, [scanValue, addByBarcode]);
+  }, [addByBarcode]);
 
   const onManualAddClickFromError = useCallback(() => {
     setMode('manual');
@@ -186,9 +183,8 @@ export default function POS() {
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-auto">
         <CenterConsole
           mode={mode}
-          scanValue={scanValue}
-          onScanValueChange={setScanValue}
           onScanSubmit={onScanSubmit}
+          isScanBlocked={paymentModalOpen}
           scannerConnected={true}
           scanError={scanError}
           onManualAddClickFromError={onManualAddClickFromError}

@@ -7,11 +7,8 @@ function locationLabel(loc: string | null): string {
   return LOCATION_LABELS[loc] ?? loc;
 }
 
-export function formatMovementWhere(movement: StockMovement): string {
-  if (movement.type === 'TRANSFER') {
-    return `${locationLabel(movement.fromLocation)} → ${locationLabel(movement.toLocation)}`;
-  }
-  return locationLabel(movement.toLocation ?? movement.fromLocation) || '—';
+export function formatMovementEnd(location: string | null): string {
+  return locationLabel(location) || '—';
 }
 
 function formatDate(iso: string): string {
@@ -55,14 +52,16 @@ export function StockMovementsTable({
             <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Type</th>
             <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Product</th>
             <th className="text-right px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Qty</th>
-            <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Location</th>
+            <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">From</th>
+            <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">To</th>
+            <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Reason</th>
             <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">Reference</th>
             <th className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase">By</th>
           </tr>
         </thead>
         <tbody>
           {movements.map((m) => {
-            const details = [m.reference, m.supplier, m.reason].filter(Boolean).join(' · ');
+            const details = [m.reference, m.supplier].filter(Boolean).join(' · ');
             return (
               <tr key={m.id} className="border-b border-border/50 hover:bg-muted/20">
                 <td className="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatDate(m.createdAt)}</td>
@@ -71,7 +70,9 @@ export function StockMovementsTable({
                 </td>
                 <td className="px-5 py-3 font-medium text-foreground">{m.productName}</td>
                 <td className="px-5 py-3 text-right text-foreground">{m.qty}</td>
-                <td className="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatMovementWhere(m)}</td>
+                <td className="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatMovementEnd(m.fromLocation)}</td>
+                <td className="px-5 py-3 text-sm text-muted-foreground whitespace-nowrap">{formatMovementEnd(m.toLocation)}</td>
+                <td className="px-5 py-3 text-sm text-foreground">{m.reason || '—'}</td>
                 <td className="px-5 py-3 text-sm text-muted-foreground">{details || '—'}</td>
                 <td className="px-5 py-3 text-sm text-muted-foreground">{m.actorName || '—'}</td>
               </tr>
