@@ -111,3 +111,17 @@
     }
   }
 }
+
+/* Error and warning toasts stay dismissable, and sit in the middle of the screen. */
+[data-sonner-toast][data-type='error'],
+[data-sonner-toast][data-type='warning'] {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  transform: translate(-50%, -50%) !important;
+  width: min(24rem, calc(100vw - 2rem)) !important;
+  text-align: center;
+  justify-content: center;
+}
