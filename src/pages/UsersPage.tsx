@@ -36,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
 import type { ManagedUser, UserRole } from '@/lib/types';
@@ -90,8 +91,7 @@ export default function UsersPage() {
         toast.error('Session expired. Please sign in again.');
         return;
       }
-      const msg = e instanceof Error ? e.message : 'Failed to load users';
-      toast.error(msg);
+      toast.error(friendlyErrorMessage(e, 'Failed to load users'));
       setUsers([]);
     } finally {
       setLoading(false);
@@ -134,7 +134,7 @@ export default function UsersPage() {
       setAddFormKey((key) => key + 1);
       await loadUsers();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to add user');
+      toast.error(friendlyErrorMessage(e, 'Failed to add user'));
     } finally {
       setAdding(false);
     }
@@ -147,7 +147,7 @@ export default function UsersPage() {
       await sendUserWelcomeEmail(target.id);
       toast.success(`Welcome email sent to ${target.email}.`);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to send welcome email');
+      toast.error(friendlyErrorMessage(e, 'Failed to send welcome email'));
     } finally {
       setSendingWelcomeId(null);
     }
@@ -166,7 +166,7 @@ export default function UsersPage() {
       setPasswordTarget(null);
       setNewPassword('');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to change password');
+      toast.error(friendlyErrorMessage(e, 'Failed to change password'));
     } finally {
       setSavingPassword(false);
     }
@@ -182,7 +182,7 @@ export default function UsersPage() {
       setToggleTarget(null);
       await loadUsers();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to update status');
+      toast.error(friendlyErrorMessage(e, 'Failed to update status'));
     } finally {
       setTogglingActive(false);
     }
@@ -197,7 +197,7 @@ export default function UsersPage() {
       setDeleteTarget(null);
       await loadUsers();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to delete user');
+      toast.error(friendlyErrorMessage(e, 'Failed to delete user'));
     } finally {
       setDeleting(false);
     }
@@ -211,7 +211,7 @@ export default function UsersPage() {
       toast.success(`Role updated for ${target.name}.`);
       await loadUsers();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to update role');
+      toast.error(friendlyErrorMessage(e, 'Failed to update role'));
     } finally {
       setSavingRoleId(null);
     }

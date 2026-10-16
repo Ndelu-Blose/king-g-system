@@ -5,6 +5,7 @@ import { BackButton } from '@/components/BackButton';
 import { useInventory } from '@/contexts/InventoryContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 
 export default function StockTake() {
@@ -51,7 +52,7 @@ export default function StockTake() {
           : 'Stock take saved. Counts applied.'
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Stock take could not be saved.');
+      toast.error(friendlyErrorMessage(err, 'Stock take could not be saved.'));
     } finally {
       setSaving(false);
     }

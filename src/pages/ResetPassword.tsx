@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { establishRecoverySession } from '@/lib/recovery-session';
+import { toFriendlyMessage } from '@/lib/friendly-error';
 import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -100,7 +101,7 @@ export default function ResetPassword() {
     try {
       const { error: updateError } = await getSupabase().auth.updateUser({ password });
       if (updateError) {
-        setError(updateError.message || 'Failed to update password.');
+        setError(toFriendlyMessage(updateError.message || 'Failed to update password.'));
         return;
       }
       setMessage('Password updated. You can sign in with your new password.');

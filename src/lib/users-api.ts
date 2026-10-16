@@ -1,6 +1,7 @@
 import type { ManagedUser, UserRole } from './types';
 import { authHeaders, clearStoredToken, isAuthFailureStatus } from './auth-api';
 import { getApiBase, usesLocalApiProxy } from './api-base';
+import { toFriendlyMessage } from './friendly-error';
 import { getSupabase, isSupabaseConfigured } from './supabase';
 
 const USE_DIRECT_SUPABASE =
@@ -38,10 +39,7 @@ async function parseError(res: Response): Promise<string> {
 }
 
 function mapUserFacingError(message: string): string {
-  if (/^API \d{3}$/.test(message) || /prisma|supabase|postgres|pgrst/i.test(message)) {
-    return 'Something went wrong. Please try again or contact support.';
-  }
-  return message;
+  return toFriendlyMessage(message);
 }
 
 async function handleResponse(res: Response): Promise<void> {
@@ -115,7 +113,7 @@ export async function fetchUsers(): Promise<ManagedUser[]> {
       .from('users')
       .select('id,name,email,role,active')
       .order('name', { ascending: true });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(toFriendlyMessage(error.message));
     return (data ?? []).map(mapManagedUser);
   }
   return apiGet<ManagedUser[]>('/api/users');

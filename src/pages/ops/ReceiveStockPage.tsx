@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { BackButton } from '@/components/BackButton';
@@ -140,7 +141,7 @@ export default function ReceiveStockPage() {
         `Stock intake saved. ${verifiedLines.filter((l) => l.actualQuantity > 0).length} line(s) updated. Audit trail: ${supplier}, ${invoiceNumber}, ${user.name}.`
       );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Stock could not be saved. Nothing new was kept.');
+      toast.error(friendlyErrorMessage(e, 'Stock could not be saved. Nothing new was kept.'));
     } finally {
       setConfirming(false);
     }

@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useInventory } from '@/contexts/InventoryContext';
 import { getSupplierNames } from '@/lib/suppliers-store';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 import { validateUploadFile } from '@/lib/file-upload';
 import {
@@ -44,7 +45,7 @@ export default function DeliveriesPage() {
       const list = await fetchDeliveries();
       setDeliveries(list);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to load deliveries');
+      toast.error(friendlyErrorMessage(e, 'Failed to load deliveries'));
       setDeliveries([]);
     } finally {
       setLoading(false);
@@ -100,7 +101,7 @@ export default function DeliveriesPage() {
       toast.success('Delivery recorded. Invoice and POD uploaded successfully.');
       await loadDeliveries();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to record delivery');
+      toast.error(friendlyErrorMessage(e, 'Failed to record delivery'));
     } finally {
       setUploading(false);
     }
@@ -111,7 +112,7 @@ export default function DeliveriesPage() {
       const { url } = await getDeliveryDocumentUrl(recordId, type);
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to open document');
+      toast.error(friendlyErrorMessage(e, 'Failed to open document'));
     }
   };
 

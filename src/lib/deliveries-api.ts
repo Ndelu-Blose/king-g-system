@@ -1,6 +1,6 @@
 import { authHeaders } from './auth-api';
 import { getApiBase } from './api-base';
-import { friendlyErrorMessage } from '@/hooks/useAsyncAction';
+import { toFriendlyMessage } from './friendly-error';
 
 export interface DeliveryRecord {
   id: string;
@@ -18,11 +18,11 @@ export interface DeliveryRecord {
 async function parseError(res: Response): Promise<string> {
   try {
     const body = await res.json();
-    if (body && typeof body.error === 'string') return body.error;
+    if (body && typeof body.error === 'string') return toFriendlyMessage(body.error);
   } catch {
     /* ignore */
   }
-  return friendlyErrorMessage(new Error(`API ${res.status}`));
+  return toFriendlyMessage(`API ${res.status}`);
 }
 
 export async function fetchDeliveries(): Promise<DeliveryRecord[]> {

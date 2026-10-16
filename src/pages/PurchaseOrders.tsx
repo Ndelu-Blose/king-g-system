@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 import {
   usePurchaseOrders,
@@ -164,7 +165,7 @@ export default function PurchaseOrdersPage() {
         toast.success('Delivery received. Stock posted to Warehouse.');
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Stock could not be saved.');
+      toast.error(friendlyErrorMessage(e, 'Stock could not be saved.'));
     }
   };
 

@@ -1,6 +1,7 @@
 import { usePurchaseOrders } from '@/contexts/PurchaseOrderContext';
 import { FileText, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { friendlyErrorMessage } from '@/lib/friendly-error';
 import { toast } from 'sonner';
 import { BackButton } from '@/components/BackButton';
 
@@ -13,7 +14,7 @@ export default function VarianceApprovals() {
       await approveVariance(poId);
       toast.success('Variance approved. Stock posted to Warehouse.');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Stock could not be saved.');
+      toast.error(friendlyErrorMessage(e, 'Stock could not be saved.'));
     }
   };
 
