@@ -1,9 +1,64 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { Plus, Minus, Trash2, Receipt } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
 import { VAT_RATE, getPlaceholderImageUrl } from '@/lib/pos-constants';
 import { cn } from '@/lib/utils';
+
+function QtyField({
+  qty,
+  stock,
+  onCommit,
+  onDone,
+}: {
+  qty: number;
+  stock?: number;
+  onCommit: (qty: number) => void;
+  onDone: () => void;
+}) {
+  const [text, setText] = useState(String(qty));
+
+  useEffect(() => {
+    setText(String(qty));
+  }, [qty]);
+
+  const commit = () => {
+    const n = Number(text);
+    if (!text || !Number.isFinite(n) || n <= 0) {
+      onCommit(0);
+      return;
+    }
+    const whole = Math.floor(n);
+    const capped = typeof stock === 'number' && stock > 0 ? Math.min(whole, Math.floor(stock)) : whole;
+    if (capped !== whole) {
+      toast.error(`Only ${capped} in the lounge`);
+    }
+    onCommit(capped);
+    setText(String(capped));
+  };
+
+  return (
+    <input
+      inputMode="numeric"
+      aria-label="Quantity"
+      className="h-9 w-16 rounded-md border border-border bg-background text-center text-sm font-semibold tabular-nums text-foreground"
+      value={text}
+      onClick={(e) => e.stopPropagation()}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setText(e.target.value.replace(/\D/g, '').slice(0, 4))}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.currentTarget.blur();
+          onDone();
+        }
+      }}
+    />
+  );
+}
 
 interface CartPanelProps {
   onProceedToPayment: () => void;
@@ -16,16 +71,19 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
     selectedLineId,
     setSelectedLineId,
     updateQty,
+    setLineQty,
     removeItem,
+    focusScanInput,
     total,
   } = useCart();
   const listRef = useRef<HTMLDivElement>(null);
 
+  const lineCount = cart.length;
   useEffect(() => {
     const list = listRef.current;
     if (!list) return;
     list.scrollTop = list.scrollHeight;
-  }, [cart]);
+  }, [lineCount]);
 
   const subtotal = useMemo(() => cart.reduce((sum, c) => sum + c.unitPrice * c.qty, 0), [cart]);
   const vat = useMemo(() => Math.round(subtotal * VAT_RATE * 100) / 100, [subtotal]);
@@ -55,6 +113,7 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
                   )}
                   onClick={() => setSelectedLineId(item.product.id)}
                   onKeyDown={(e) => {
+                    if ((e.target as HTMLElement).tagName === 'INPUT') return;
                     if (e.key === 'Delete' || e.key === 'Backspace') {
                       e.preventDefault();
                       removeItem(item.product.id);
@@ -96,9 +155,12 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
                     >
                       <Minus className="w-4 h-4" />
                     </Button>
-                    <span className="w-9 text-center text-sm font-semibold text-foreground tabular-nums">
-                      {item.qty}
-                    </span>
+                    <QtyField
+                      qty={item.qty}
+                      stock={item.product.stock}
+                      onCommit={(qty) => setLineQty(item.product.id, qty)}
+                      onDone={focusScanInput}
+                    />
                     <Button
                       variant="ghost"
                       size="icon"
