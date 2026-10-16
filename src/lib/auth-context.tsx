@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { User } from './types';
 import { fetchCurrentUser, loginWithApi, signOutAuth, storeToken } from './auth-api';
+import { getSupabase, isSupabaseConfigured } from './supabase';
 
 type LoginOutcome = { user: User } | { error: string };
 
@@ -31,8 +32,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!cancelled && restored) setUser(restored);
       if (!cancelled) setBootstrapping(false);
     });
+
+    if (!isSupabaseConfigured) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const { data: authListener } = getSupabase().auth.onAuthStateChange((_event, session) => {
+      if (session?.access_token) storeToken(session.access_token);
+    });
+
     return () => {
       cancelled = true;
+      authListener.subscription.unsubscribe();
     };
   }, []);
 

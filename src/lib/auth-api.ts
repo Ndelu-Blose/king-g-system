@@ -212,6 +212,47 @@ export function storeToken(token: string): void {
   if (typeof window !== 'undefined') localStorage.setItem(TOKEN_KEY, token);
 }
 
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      const { data, error } = await getSupabase().auth.refreshSession();
+      const token = !error ? data.session?.access_token ?? null : null;
+      if (token) storeToken(token);
+      return token;
+    })().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+/** Access token for API calls. Uses the live Supabase session, refreshing it when it is expired. */
+export async function getFreshAccessToken(options?: { force?: boolean }): Promise<string | null> {
+  if (isSupabaseConfigured) {
+    try {
+      const { data } = await getSupabase().auth.getSession();
+      const session = data.session;
+      const expiresAtMs = (session?.expires_at ?? 0) * 1000;
+      if (!options?.force && session?.access_token && expiresAtMs >= Date.now() + 60_000) {
+        storeToken(session.access_token);
+        return session.access_token;
+      }
+      const refreshed = await refreshAccessToken();
+      if (refreshed) return refreshed;
+      const { data: latest } = await getSupabase().auth.getSession();
+      if (latest.session?.access_token) {
+        storeToken(latest.session.access_token);
+        return latest.session.access_token;
+      }
+    } catch {
+      /* fall back to the last stored token */
+    }
+  }
+  return getStoredToken();
+}
+
 export function authHeaders(): Record<string, string> {
   const token = getStoredToken();
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
