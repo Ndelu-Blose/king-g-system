@@ -1,8 +1,6 @@
-import { useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useRef, useMemo } from 'react';
 import { Plus, Minus, Trash2, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { useCart } from '@/contexts/CartContext';
 import { VAT_RATE, getPlaceholderImageUrl } from '@/lib/pos-constants';
 import { cn } from '@/lib/utils';
@@ -23,32 +21,32 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
   } = useCart();
   const listRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    list.scrollTop = list.scrollHeight;
+  }, [cart]);
+
   const subtotal = useMemo(() => cart.reduce((sum, c) => sum + c.unitPrice * c.qty, 0), [cart]);
   const vat = useMemo(() => Math.round(subtotal * VAT_RATE * 100) / 100, [subtotal]);
   const grandTotal = useMemo(() => Math.round((subtotal + vat) * 100) / 100, [subtotal, vat]);
 
   return (
-    <div className="w-[420px] glass-card flex flex-col flex-shrink-0 h-[calc(100vh-48px)] min-h-0">
+    <div className="glass-card flex h-full min-h-0 w-full flex-col">
       <div className="p-4 border-b border-border flex-shrink-0">
         <h2 className="font-display text-lg font-semibold text-foreground">Current Sale</h2>
         <p className="text-xs text-muted-foreground">{cart.length} items</p>
       </div>
 
-      {/* Main transaction panel: vertical list of scanned items */}
-      <ScrollArea className="flex-1 min-h-0 p-3">
-        <div ref={listRef} className="space-y-2" role="list">
-          <AnimatePresence>
+      <div ref={listRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" role="list">
             {cart.map((item) => {
               const lineTotal = item.unitPrice * item.qty;
               const imgSrc = item.product.image || getPlaceholderImageUrl(item.product.name);
               return (
-                <motion.div
+                <div
                   key={item.product.id}
                   role="listitem"
                   tabIndex={0}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
                   className={cn(
                     'flex items-center gap-3 p-3 rounded-xl transition-colors outline-none touch-manipulation',
                     selectedLineId === item.product.id
@@ -129,10 +127,9 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
-                </motion.div>
+                </div>
               );
             })}
-          </AnimatePresence>
           {cart.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <Receipt className="w-10 h-10 mx-auto mb-3 opacity-30" />
@@ -140,8 +137,7 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
               <p className="text-xs mt-1">Scan or search to add items</p>
             </div>
           )}
-        </div>
-      </ScrollArea>
+      </div>
 
       {/* Totals: Subtotal, VAT, Grand total */}
       <div className="p-4 border-t border-border space-y-2 flex-shrink-0">

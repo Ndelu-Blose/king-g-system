@@ -128,7 +128,7 @@ export function CenterConsole({
   }, [scanning, focusScan, scanRef]);
 
   return (
-    <div className="px-6 pt-6">
+    <div className="h-full">
       <Card className="rounded-2xl border-border/60 bg-card/60 backdrop-blur supports-[backdrop-filter]:bg-card/50">
         <div className="p-6 space-y-4">
           <div className="flex items-center justify-between">
@@ -246,7 +246,6 @@ export function CenterConsole({
         </div>
       </Card>
 
-      <div className="min-h-[8rem]" />
     </div>
   );
 }
