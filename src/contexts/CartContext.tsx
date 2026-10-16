@@ -26,6 +26,7 @@ interface CartContextValue {
   ) => Promise<{ success: true; product: ProductWithStock } | { success: false; reason: 'not_found' | 'out_of_stock' }>;
   addProduct: (product: Product | ProductWithStock, qty?: number) => boolean;
   updateQty: (productId: string, delta: number) => void;
+  setLineQty: (productId: string, qty: number) => void;
   removeItem: (productId: string) => void;
   clearCart: () => void;
   total: number;
@@ -136,6 +137,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setSelectedLineId(prev => (prev === productId ? null : prev));
   }, []);
 
+  const setLineQty = useCallback((productId: string, qty: number) => {
+    const next = Math.floor(Number(qty));
+    if (!Number.isFinite(next) || next <= 0) {
+      setCart(prev => prev.filter(c => c.product.id !== productId));
+      return;
+    }
+    setCart(prev =>
+      prev.map(c => {
+        if (c.product.id !== productId) return c;
+        const stock = c.product.stock;
+        const capped = typeof stock === 'number' && stock > 0 ? Math.min(next, Math.floor(stock)) : next;
+        return { ...c, qty: capped };
+      })
+    );
+  }, []);
+
   const removeItem = useCallback((productId: string) => {
     setCart(prev => prev.filter(c => c.product.id !== productId));
     setSelectedLineId(prev => (prev === productId ? null : prev));
@@ -158,6 +175,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     addByBarcode,
     addProduct,
     updateQty,
+    setLineQty,
     removeItem,
     clearCart,
     total,
