@@ -175,12 +175,12 @@ export default function POS() {
   ]);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-4 shrink-0">
+    <div className="flex h-[calc(100vh-4.5rem)] min-h-0 flex-col gap-3">
+      <div className="flex shrink-0 items-center gap-4">
         <BackButton to="/dashboard" label="Back to Dashboard" />
       </div>
-      <div className="flex gap-4 h-[calc(100vh-96px)] flex-col md:flex-row bg-background">
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-auto">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+      <div className="flex w-full shrink-0 flex-col lg:w-[340px]">
         <CenterConsole
           mode={mode}
           onScanSubmit={onScanSubmit}
@@ -210,10 +210,12 @@ export default function POS() {
         ) : null}
       </div>
 
+      <div className="min-h-0 min-w-0 flex-1">
       <CartPanel
         onProceedToPayment={handleProceedToPayment}
         disabled={paymentModalOpen}
       />
+      </div>
 
       <PaymentModal
         open={paymentModalOpen}
