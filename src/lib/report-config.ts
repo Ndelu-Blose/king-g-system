@@ -15,7 +15,7 @@ export const reportList: ReportItem[] = [
   { id: '2', slug: 'cashier-performance', title: 'Cashier Performance', description: 'Sales by cashier, transactions per hour', icon: Users, category: 'Sales' },
   { id: '3', slug: 'product-performance', title: 'Product Performance', description: 'Best sellers, slow movers, category analysis', icon: TrendingUp, category: 'Sales' },
   { id: '4', slug: 'stock-level', title: 'Stock Level Report', description: 'Current quantities by location, low stock alerts', icon: Package, category: 'Inventory' },
-  { id: '5', slug: 'stock-movement', title: 'Stock Movement Report', description: 'Transfers between locations, patterns', icon: Package, category: 'Inventory' },
+  { id: '5', slug: 'stock-movement', title: 'Stock Movement Report', description: 'Arrivals, transfers, expired stock, broken bottles, and sales', icon: Package, category: 'Inventory' },
   { id: '6', slug: 'cash-reconciliation', title: 'Cash Reconciliation', description: 'Expected vs actual, variance history', icon: DollarSign, category: 'Financial' },
   { id: '7', slug: 'void-refund', title: 'Void & Refund Report', description: 'All voided transactions, reasons, approvers', icon: FileText, category: 'Audit' },
   { id: '8', slug: 'supplier-variance', title: 'Supplier Variance Report', description: 'Delivery discrepancies, variance trends', icon: FileText, category: 'Supplier' },

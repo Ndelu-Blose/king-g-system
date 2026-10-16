@@ -1,11 +1,8 @@
 import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FileWarning, Plus, Loader2 } from 'lucide-react';
-import {
-  getIncidents,
-  addIncident,
-  resolveIncident,
-} from '@/lib/ops-store';
-import { useAuth } from '@/lib/auth-context';
+import { getIncidents } from '@/lib/ops-store';
+import { getIncidentReports, resolveIncidentReport, saveIncidentReport } from '@/lib/pos-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,8 +28,33 @@ const INCIDENT_TYPES = [
 ];
 
 export default function IncidentReportsPage() {
-  const { user } = useAuth();
-  const [list, setList] = useState(() => getIncidents());
+  const queryClient = useQueryClient();
+  const { data: list = [], isLoading, isError, refetch } = useQuery({
+    queryKey: ['incidents'],
+    queryFn: async () => {
+      const remote = await getIncidentReports();
+      const known = new Set(remote.map((row) => row.id));
+      const local = getIncidents();
+      for (const row of local) {
+        if (known.has(row.id)) continue;
+        const saved = await saveIncidentReport({
+          id: row.id,
+          type: row.type,
+          title: row.title,
+          description: row.description,
+          location: row.location,
+          reportedAt: row.reportedAt,
+          reportedBy: row.reportedBy,
+          attachmentName: row.attachmentName,
+          attachmentStoragePath: row.attachmentStoragePath,
+        });
+        remote.push(saved);
+        known.add(saved.id);
+      }
+      if (local.length) localStorage.removeItem('kingg_incidents');
+      return remote;
+    },
+  });
   const [showForm, setShowForm] = useState(false);
   const [type, setType] = useState(INCIDENT_TYPES[0]);
   const [title, setTitle] = useState('');
@@ -40,8 +62,6 @@ export default function IncidentReportsPage() {
   const [location, setLocation] = useState('');
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const refresh = () => setList(getIncidents());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,17 +90,16 @@ export default function IncidentReportsPage() {
         attachmentStoragePath = uploaded.storagePath;
       }
 
-      addIncident({
+      await saveIncidentReport({
         id: incidentId,
         type,
         title: title.trim(),
         description: description.trim(),
         location: location.trim() || undefined,
-        reportedBy: user?.name,
         attachmentName,
         attachmentStoragePath,
       });
-      refresh();
+      await queryClient.invalidateQueries({ queryKey: ['incidents'] });
       setShowForm(false);
       setTitle('');
       setDescription('');
@@ -94,10 +113,14 @@ export default function IncidentReportsPage() {
     }
   };
 
-  const handleResolve = (id: string) => {
-    resolveIncident(id, 'Resolved by manager');
-    refresh();
-    toast.success('Marked as resolved.');
+  const handleResolve = async (id: string) => {
+    try {
+      await resolveIncidentReport(id);
+      await queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      toast.success('Marked as resolved.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not resolve the incident.');
+    }
   };
 
   const formatDate = (iso: string) =>
@@ -197,7 +220,14 @@ export default function IncidentReportsPage() {
         <h2 className="font-display text-lg font-semibold text-foreground px-5 py-3 border-b border-border">
           Open ({open.length})
         </h2>
-        {open.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center text-muted-foreground text-sm">Loading incidents…</div>
+        ) : isError ? (
+          <div className="p-8 text-center text-sm text-destructive">
+            Could not load incidents.
+            <Button variant="link" onClick={() => refetch()}>Try again</Button>
+          </div>
+        ) : open.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground text-sm">
             Nothing open. Use “Report an incident” when something needs to be logged.
           </div>

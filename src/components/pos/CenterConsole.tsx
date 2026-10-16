@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Search, ArrowLeft, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useScanFocusLock } from '@/hooks/use-scan-focus-lock';
 
 export type PosMode = 'scan' | 'manual';
 
@@ -18,9 +19,9 @@ export type LastScanned = {
 type Props = {
   mode: PosMode;
 
-  scanValue: string;
-  onScanValueChange: (v: string) => void;
-  onScanSubmit: () => void;
+  onScanSubmit: (code: string) => void;
+  /** Payment modal (or similar) is open — do not steal keystrokes. */
+  isScanBlocked?: boolean;
 
   scannerConnected: boolean;
 
@@ -43,9 +44,8 @@ function formatZar(v: number) {
 
 export function CenterConsole({
   mode,
-  scanValue,
-  onScanValueChange,
   onScanSubmit,
+  isScanBlocked = false,
   scannerConnected,
   scanError,
   onManualAddClickFromError,
@@ -56,23 +56,76 @@ export function CenterConsole({
   showShortcuts = true,
   setScanInputRef,
 }: Props) {
-  const scanRef = React.useRef<HTMLInputElement>(null);
   const manualRef = React.useRef<HTMLInputElement>(null);
+  const scanning = mode === 'scan' && !isScanBlocked;
+  const { inputRef: scanRef, focusScan } = useScanFocusLock({
+    enabled: scanning,
+    isBlocked: !scanning,
+  });
+  const onScanSubmitRef = React.useRef(onScanSubmit);
+  onScanSubmitRef.current = onScanSubmit;
+  const lastSubmitRef = React.useRef({ code: '', at: 0 });
 
   React.useEffect(() => {
     setScanInputRef?.(scanRef);
     return () => setScanInputRef?.({ current: null });
-  }, [setScanInputRef]);
+  }, [setScanInputRef, scanRef]);
 
   React.useEffect(() => {
-    if (mode === 'scan') {
-      scanRef.current?.focus({ preventScroll: true });
-    } else {
+    if (mode !== 'scan') {
       scanRef.current?.blur();
       manualRef.current?.focus({ preventScroll: true });
       manualRef.current?.select();
     }
-  }, [mode]);
+  }, [mode, scanRef]);
+
+  React.useEffect(() => {
+    if (!scanning) return;
+
+    const submit = (code: string) => {
+      const now = Date.now();
+      if (code === lastSubmitRef.current.code && now - lastSubmitRef.current.at < 50) return;
+      lastSubmitRef.current = { code, at: now };
+      if (scanRef.current) scanRef.current.value = '';
+      onScanSubmitRef.current(code);
+      focusScan();
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) return;
+      const active = document.activeElement;
+      const tag = (active as HTMLElement | null)?.tagName?.toLowerCase();
+      const inOtherField =
+        !!active &&
+        active !== scanRef.current &&
+        (tag === 'input' || tag === 'textarea' || (active as HTMLElement).isContentEditable);
+      if (inOtherField) return;
+
+      const code = scanRef.current?.value ?? '';
+      if (e.key === 'Enter' || (e.key === 'Tab' && code.trim())) {
+        if (!code.trim()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        submit(code);
+        return;
+      }
+
+      // Keep qty shortcuts (+, -) for the cart. Everything else a scanner types
+      // goes into the scan box, even when focus was left on the page body.
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === '+' || e.key === '=' || e.key === '-') return;
+      if (active === scanRef.current) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      if (!scanRef.current) return;
+      scanRef.current.focus({ preventScroll: true });
+      scanRef.current.value += e.key;
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [scanning, focusScan, scanRef]);
 
   return (
     <div className="px-6 pt-6">
@@ -101,16 +154,13 @@ export function CenterConsole({
             <div className="space-y-3">
               <Input
                 ref={scanRef}
-                value={scanValue}
-                onChange={(e) => onScanValueChange(e.target.value)}
+                name="barcode"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="Scan barcode…"
                 className="h-14 rounded-2xl border-border/60 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    onScanSubmit();
-                  }
-                }}
+                aria-label="Scan barcode"
               />
 
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

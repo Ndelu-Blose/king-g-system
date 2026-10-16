@@ -23,7 +23,8 @@ const transfer: StockMovement = {
 describe('StockMovementsTable', () => {
   it('shows a transfer as warehouse to lounge', () => {
     render(<StockMovementsTable movements={[transfer]} />);
-    expect(screen.getByText('Warehouse → Lounge')).toBeInTheDocument();
+    expect(screen.getByText('Warehouse')).toBeInTheDocument();
+    expect(screen.getByText('Lounge')).toBeInTheDocument();
     expect(screen.getByText('Castle Lite')).toBeInTheDocument();
   });
 });

@@ -91,7 +91,7 @@ export default function ReportDetail() {
     queryFn: getAllProducts,
   });
 
-  const isStockMovementReport = report?.slug === 'stock-movement';
+  const isStockMovementReport = report?.slug === 'stock-movement' || report?.slug === 'inventory';
   const { data: stockMovements = [], isLoading: stockMovementsLoading, isError: stockMovementsError } = useQuery({
     queryKey: ['stock-movements', 'report', dateFrom, dateTo, location],
     queryFn: () => {
@@ -472,14 +472,21 @@ export default function ReportDetail() {
           </>
         )}
 
-        {report.slug === 'stock-movement' && (
+        {(report.slug === 'stock-movement' || report.slug === 'inventory') && (
           <div className="glass-card overflow-hidden">
-            <h3 className="font-display text-lg font-semibold text-foreground px-5 pt-5 pb-2">Stock movements</h3>
+            <h3 className="font-display text-lg font-semibold text-foreground px-5 pt-5 pb-2">
+              {report.slug === 'inventory' ? 'Expired, broken, and other stock movement' : 'Stock movements'}
+            </h3>
+            <p className="px-5 pb-2 text-sm text-muted-foreground">
+              An arrival has no From: the stock did not leave the lounge or the warehouse. To is where it was received. A transfer has both. Expired stock and broken bottles are an Adjustment.
+            </p>
             <StockMovementsTable
-              movements={stockMovements}
+              movements={report.slug === 'inventory'
+                ? stockMovements.filter((m) => m.type === 'ADJUSTMENT' || m.qty < 0)
+                : stockMovements}
               isLoading={stockMovementsLoading}
               isError={stockMovementsError}
-              emptyText="No movement history recorded for the selected period."
+              emptyText="No expired, broken, or other stock movement in the selected period."
             />
           </div>
         )}

@@ -72,6 +72,7 @@ export interface BlindTransferCopyLine {
 }
 
 import { getApiBase } from './api-base';
+import { normalizeBarcode } from './barcode';
 
 const API_BASE = getApiBase();
 const TOKEN_KEY = 'kingg_token';
@@ -210,12 +211,12 @@ export function subscribeToProductCatalog(onChange: () => void): () => void {
 
 /** Get product by barcode from backend or Supabase. */
 export async function getProductByBarcode(barcode: string): Promise<ProductWithStock | null> {
-  const trimmed = barcode.trim();
+  const trimmed = normalizeBarcode(barcode);
   if (!trimmed) return null;
   if (USE_DIRECT_SUPABASE) {
     const { data, error } = await supabase
       .from('products')
-      .select('id,name,barcode,category,base_price,cost_price,size_ml,image,inventory(total_qty)')
+      .select('id,name,barcode,category,base_price,cost_price,size_ml,image,inventory(lounge_qty)')
       .eq('barcode', trimmed)
       .maybeSingle();
     if (error) throw new Error(error.message);
@@ -229,7 +230,7 @@ export async function getProductByBarcode(barcode: string): Promise<ProductWithS
       costPrice: data.cost_price,
       sizeMl: data.size_ml ?? undefined,
       image: data.image ?? undefined,
-      stock: data.inventory?.[0]?.total_qty ?? 0,
+      stock: data.inventory?.[0]?.lounge_qty ?? 0,
     };
   }
   try {
@@ -544,6 +545,60 @@ export async function getStockMovements(query: {
   }
   const search = qs.toString();
   return apiGet<StockMovement[]>(`/api/inventory/movements${search ? `?${search}` : ''}`);
+}
+
+export interface IncidentReport {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  location?: string | null;
+  reportedAt: string;
+  reportedBy?: string | null;
+  resolved: boolean;
+  resolvedAt?: string | null;
+  resolvedNotes?: string | null;
+  attachmentName?: string | null;
+  attachmentStoragePath?: string | null;
+}
+
+export async function getIncidentReports(): Promise<IncidentReport[]> {
+  return apiGet<IncidentReport[]>('/api/incidents');
+}
+
+export async function saveIncidentReport(payload: {
+  id?: string;
+  type: string;
+  title: string;
+  description: string;
+  location?: string;
+  reportedAt?: string;
+  reportedBy?: string;
+  attachmentName?: string;
+  attachmentStoragePath?: string;
+}): Promise<IncidentReport> {
+  const res = await fetch(`${API_BASE}/api/incidents`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `Could not save the incident (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function resolveIncidentReport(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/incidents/${encodeURIComponent(id)}/resolve`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify({ notes: 'Resolved by manager' }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string }).error || `Could not resolve the incident (${res.status})`);
+  }
 }
 
 export async function writeOffStockApi(payload: {

@@ -13,6 +13,7 @@ import * as users from "./services/users.service.js";
 import * as receiving from "./services/receiving.service.js";
 import * as deliveries from "./services/deliveries.service.js";
 import * as notifications from "./services/notifications.service.js";
+import * as incidents from "./services/incidents.service.js";
 import { sendError } from "./lib/api-error.js";
 import { sanitizeClientAuditEntry, validateSettingsUpdate, corsOriginsFromEnv } from "./lib/request-policy.js";
 
@@ -267,6 +268,8 @@ export function createApp() {
       const msg = e instanceof Error ? e.message : String(e);
       if (
         msg.includes("Insufficient stock") ||
+        msg.includes("Not enough stock") ||
+        msg.includes("Stock changed while saving") ||
         msg.includes("Invalid quantity") ||
         msg.includes("Invalid sale items") ||
         msg.includes("Invalid lineTotal") ||
@@ -817,6 +820,42 @@ export function createApp() {
   // Health
   app.get("/health", (_req, res) => res.json({ ok: true, ...getServerCapabilities() }));
   app.get("/api/health", (_req, res) => res.json({ ok: true, ...getServerCapabilities() }));
+
+  app.get("/api/incidents", authMiddleware, requirePermission("incident.view"), async (_req, res) => {
+    try {
+      res.json(await incidents.listIncidents());
+    } catch (e) {
+      return sendError(res, "GET /api/incidents", e, { fallback: "Failed to load incidents" });
+    }
+  });
+
+  app.post("/api/incidents", authMiddleware, requirePermission("incident.create"), async (req, res) => {
+    try {
+      const result = await incidents.createIncident({
+        ...(req.body || {}),
+        actorId: req.user.id,
+        actorName: req.user.name,
+        actorRole: req.user.role,
+      });
+      if (!result.ok) return res.status(400).json({ error: result.error });
+      res.status(result.created ? 201 : 200).json(result.incident);
+    } catch (e) {
+      return sendError(res, "POST /api/incidents", e, { fallback: "Failed to save incident" });
+    }
+  });
+
+  app.post("/api/incidents/:id/resolve", authMiddleware, requirePermission("incident.view"), async (req, res) => {
+    try {
+      const result = await incidents.resolveIncident(req.params.id, {
+        actorId: req.user.id,
+        notes: req.body?.notes || "Resolved",
+      });
+      if (!result.ok) return res.status(404).json({ error: result.error });
+      res.json({ ok: true });
+    } catch (e) {
+      return sendError(res, "POST /api/incidents/:id/resolve", e, { fallback: "Failed to resolve incident" });
+    }
+  });
 
   // --- Reports (Supabase-backed; optional during migration) ---
   app.get("/api/reports", authMiddleware, requirePermission("report.view"), async (req, res) => {
