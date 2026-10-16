@@ -12,7 +12,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useShift } from '@/contexts/ShiftContext';
 import { useAuth } from '@/lib/auth-context';
 import { createSale } from '@/lib/pos-api';
-import { VAT_RATE } from '@/lib/pos-constants';
+import { saleVat } from '@/lib/pos-constants';
 import { ReceiptView } from '@/components/pos/ReceiptView';
 import type { PaymentMethod, ReceiptData } from '@/types/pos';
 import { cn } from '@/lib/utils';
@@ -40,7 +40,7 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
   const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
 
   const subtotal = useMemo(() => cart.reduce((sum, c) => sum + c.unitPrice * c.qty, 0), [cart]);
-  const vat = useMemo(() => Math.round(subtotal * VAT_RATE * 100) / 100, [subtotal]);
+  const vat = useMemo(() => saleVat(subtotal), [subtotal]);
   const grandTotal = useMemo(() => Math.round((subtotal + vat) * 100) / 100, [subtotal, vat]);
 
   const cashNum = parseFloat(cashReceived) || 0;
@@ -185,9 +185,9 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
                 <Receipt className="w-8 h-8 text-success" />
               </div>
               <h3 className="font-display text-xl font-bold text-foreground">Payment complete</h3>
-              {receiptData.payments.some((p) => p.method === 'cash') && (
+              {receiptData.payments.some((p) => p.method === 'cash' && (p.change ?? 0) > 0) && (
                 <p className="text-2xl font-bold text-primary mt-2">
-                  Change: R{change.toFixed(2)}
+                  Change: R{(receiptData.payments.find((p) => p.method === 'cash')?.change ?? 0).toFixed(2)}
                 </p>
               )}
             </div>
@@ -196,7 +196,7 @@ export function PaymentModal({ open, onClose, onSuccess }: PaymentModalProps) {
         ) : (
           <>
             <div className="text-center mb-6">
-              <p className="text-muted-foreground text-sm">Grand total</p>
+              <p className="text-muted-foreground text-sm">Total</p>
               <p className={cn('text-4xl font-bold gold-text tabular-nums')}>R{grandTotal.toFixed(2)}</p>
             </div>
 

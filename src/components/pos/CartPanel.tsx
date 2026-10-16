@@ -3,7 +3,7 @@ import { Plus, Minus, Trash2, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useCart } from '@/contexts/CartContext';
-import { VAT_RATE, getPlaceholderImageUrl } from '@/lib/pos-constants';
+import { saleVat, getPlaceholderImageUrl } from '@/lib/pos-constants';
 import { cn } from '@/lib/utils';
 
 function QtyField({
@@ -86,8 +86,7 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
   }, [lineCount]);
 
   const subtotal = useMemo(() => cart.reduce((sum, c) => sum + c.unitPrice * c.qty, 0), [cart]);
-  const vat = useMemo(() => Math.round(subtotal * VAT_RATE * 100) / 100, [subtotal]);
-  const grandTotal = useMemo(() => Math.round((subtotal + vat) * 100) / 100, [subtotal, vat]);
+  const grandTotal = useMemo(() => Math.round((subtotal + saleVat(subtotal)) * 100) / 100, [subtotal]);
 
   return (
     <div className="glass-card flex h-full min-h-0 w-full flex-col">
@@ -203,16 +202,8 @@ export function CartPanel({ onProceedToPayment, disabled }: CartPanelProps) {
 
       {/* Totals: Subtotal, VAT, Grand total */}
       <div className="p-4 border-t border-border space-y-2 flex-shrink-0">
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Subtotal</span>
-          <span className="tabular-nums text-foreground">R{subtotal.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">VAT (15%)</span>
-          <span className="tabular-nums text-foreground">R{vat.toFixed(2)}</span>
-        </div>
-        <div className="flex justify-between text-base font-semibold pt-1 border-t border-border/50">
-          <span className="text-foreground">Grand total</span>
+        <div className="flex justify-between text-base font-semibold">
+          <span className="text-foreground">Total</span>
           <span className="gold-text tabular-nums">R{grandTotal.toFixed(2)}</span>
         </div>
         <Button

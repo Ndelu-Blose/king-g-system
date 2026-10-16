@@ -73,22 +73,9 @@ export default function SystemSettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Tax & business</CardTitle>
-            <CardDescription>VAT rate and business name shown on receipts.</CardDescription>
+            <CardDescription>Business name shown on receipts. VAT is not added to sales.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="tax">VAT rate (%)</Label>
-              <Input
-                id="tax"
-                type="number"
-                min={0}
-                max={100}
-                value={settings.taxRate}
-                onChange={(e) =>
-                  setSettings((s) => ({ ...s, taxRate: Number(e.target.value) || 0 }))
-                }
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="business">Business name</Label>
               <Input
