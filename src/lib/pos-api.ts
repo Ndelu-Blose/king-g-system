@@ -72,6 +72,7 @@ export interface BlindTransferCopyLine {
 }
 
 import { getApiBase } from './api-base';
+import { getFreshAccessToken } from './auth-api';
 import { normalizeBarcode } from './barcode';
 
 const API_BASE = getApiBase();
@@ -101,32 +102,43 @@ function looksLikeUnauthorized(err: unknown): boolean {
   return lower.includes('401') || lower.includes('unauthorized');
 }
 
-function authHeaders(): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getFreshAccessToken();
   const h: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) h.Authorization = `Bearer ${token}`;
   return h;
 }
 
 async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { headers: authHeaders(), cache: 'no-store' });
+  const res = await fetch(`${API_BASE}${path}`, { headers: await authHeaders(), cache: 'no-store' });
   if (res.status === 404) throw new Error('NOT_FOUND');
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
 }
 
 async function apiPost<T>(path: string, body: unknown, options?: { idempotencyKey?: string }): Promise<T> {
-  const headers = authHeaders();
-  if (options?.idempotencyKey) {
-    headers['Idempotency-Key'] = options.idempotencyKey;
+  const send = async () => {
+    const headers = await authHeaders();
+    if (options?.idempotencyKey) {
+      headers['Idempotency-Key'] = options.idempotencyKey;
+    }
+    return fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  };
+
+  let res = await send();
+  if (res.status === 401 && isSupabaseConfigured) {
+    const token = await getFreshAccessToken({ force: true });
+    if (token) res = await send();
   }
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      throw new Error('Your session expired. Sign out and sign in again.');
+    }
     throw new Error((err as { error?: string }).error || `Something went wrong. Please try again or contact support.`);
   }
   return res.json();
@@ -135,7 +147,7 @@ async function apiPost<T>(path: string, body: unknown, options?: { idempotencyKe
 async function apiPut<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'PUT',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -148,7 +160,7 @@ async function apiPut<T>(path: string, body: unknown): Promise<T> {
 async function apiDelete<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -160,7 +172,7 @@ async function apiDelete<T>(path: string): Promise<T> {
 async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'PATCH',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
@@ -426,7 +438,7 @@ export async function voidSaleApi(saleId: string, reasonCode?: string): Promise<
 
   const res = await fetch(`${API_BASE}/api/sales/${encodeURIComponent(saleId)}/void`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify({ reasonCode: reasonCode || 'void_approved' }),
   });
   if (!res.ok) {
@@ -446,7 +458,7 @@ export async function refundSaleApi(
   try {
     const res = await fetch(`${API_BASE}/api/sales/${encodeURIComponent(saleId)}/refund`, {
       method: 'POST',
-      headers: authHeaders(),
+      headers: await authHeaders(),
       body: JSON.stringify({
         reasonCode: opts?.reasonCode || 'refund_approved',
         amount: opts?.amount,
@@ -490,7 +502,7 @@ export async function receiveStockApi(
 
   const res = await fetch(`${API_BASE}/api/inventory/receive`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -579,7 +591,7 @@ export async function saveIncidentReport(payload: {
 }): Promise<IncidentReport> {
   const res = await fetch(`${API_BASE}/api/incidents`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -592,7 +604,7 @@ export async function saveIncidentReport(payload: {
 export async function resolveIncidentReport(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/incidents/${encodeURIComponent(id)}/resolve`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify({ notes: 'Resolved by manager' }),
   });
   if (!res.ok) {
@@ -609,7 +621,7 @@ export async function writeOffStockApi(payload: {
 }): Promise<void> {
   const res = await fetch(`${API_BASE}/api/inventory/adjustments`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -626,7 +638,7 @@ export async function transferStockApi(payload: {
 }): Promise<void> {
   const res = await fetch(`${API_BASE}/api/inventory/transfer`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -638,7 +650,7 @@ export async function transferStockApi(payload: {
 export async function applyStockCountApi(productId: string, totalQty: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/inventory/count`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify({ productId, totalQty }),
   });
   if (!res.ok) {
@@ -747,7 +759,7 @@ export async function saveIntakeDraftApi(payload: DeliveryIntakeApiPayload): Pro
   if (payload.id) {
     const res = await fetch(`${API_BASE}/api/intakes/${encodeURIComponent(payload.id)}/draft`, {
       method: 'PUT',
-      headers: authHeaders(),
+      headers: await authHeaders(),
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error('Failed to update intake draft');
@@ -755,7 +767,7 @@ export async function saveIntakeDraftApi(payload: DeliveryIntakeApiPayload): Pro
   }
   const res = await fetch(`${API_BASE}/api/intakes/draft`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error('Failed to create intake draft');
@@ -830,7 +842,7 @@ export async function saveExpectedLinesApi(intakeId: string, lines: DeliveryLine
   }
   const res = await fetch(`${API_BASE}/api/intakes/${encodeURIComponent(intakeId)}/expected-lines`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify({ lines }),
   });
   if (!res.ok) throw new Error('Failed to save expected lines');
@@ -908,7 +920,7 @@ export async function saveVerificationApi(
   }
   const res = await fetch(`${API_BASE}/api/intakes/${encodeURIComponent(intakeId)}/verification`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
     body: JSON.stringify({ lines, status }),
   });
   if (!res.ok) {
@@ -990,7 +1002,7 @@ export async function confirmIntakeApi(intakeId: string): Promise<DeliveryIntake
   }
   const res = await fetch(`${API_BASE}/api/intakes/${encodeURIComponent(intakeId)}/confirm`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -1056,7 +1068,7 @@ export async function generateBlindCopyApi(intakeId: string): Promise<BlindCopyA
   }
   const res = await fetch(`${API_BASE}/api/intakes/${encodeURIComponent(intakeId)}/blind-copy`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -1093,7 +1105,7 @@ export async function issueBlindCopyApi(blindCopyId: string): Promise<BlindCopyA
   }
   const res = await fetch(`${API_BASE}/api/blind-copies/${encodeURIComponent(blindCopyId)}/issue`, {
     method: 'POST',
-    headers: authHeaders(),
+    headers: await authHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -1374,7 +1386,7 @@ export async function acknowledgeHelpRequest(id: string, acknowledgedBy: string)
   if (!USE_DIRECT_SUPABASE) {
     const res = await fetch(`${API_BASE}/api/help-requests/${encodeURIComponent(id)}/acknowledge`, {
       method: 'PATCH',
-      headers: authHeaders(),
+      headers: await authHeaders(),
       body: JSON.stringify({ acknowledgedBy }),
     });
     if (!res.ok) throw new Error('Failed to acknowledge help request');
